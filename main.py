@@ -4,11 +4,9 @@ import tempfile
 from datetime import datetime
 from io import BytesIO
 from docx import Document
-from docx.shared import Pt, Cm, Inches, RGBColor
+from docx.shared import Pt, Cm, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.oxml.ns import qn
 import pdfplumber
-from PyPDF2 import PdfReader
 from PIL import Image
 import pytesseract
 from telegram import Update
@@ -28,8 +26,8 @@ ADMIN_USERNAME = "@yoldoshev_3"
 BOT_NAME = "📄 Professional File Converter"
 MAX_FILE_SIZE = 50 * 1024 * 1024
 
-# =============== SIFATLI WORD HUJJAT ===============
-def create_quality_document(title: str, original_name: str = "") -> Document:
+# =============== WORD HUJJAT YARATISH ===============
+def create_doc(title: str, original_name: str = "") -> Document:
     doc = Document()
     
     section = doc.sections[0]
@@ -42,8 +40,6 @@ def create_quality_document(title: str, original_name: str = "") -> Document:
     font = style.font
     font.name = 'Calibri'
     font.size = Pt(11)
-    style.paragraph_format.space_after = Pt(6)
-    style.paragraph_format.line_spacing = 1.15
     
     title_heading = doc.add_heading(title, level=0)
     title_heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -65,11 +61,10 @@ def create_quality_document(title: str, original_name: str = "") -> Document:
         file_run.font.color.rgb = RGBColor(128, 128, 128)
     
     line_para = doc.add_paragraph()
-    line_para.paragraph_format.space_before = Pt(12)
-    line_para.paragraph_format.space_after = Pt(12)
     line_run = line_para.add_run("─" * 70)
     line_run.font.size = Pt(6)
     line_run.font.color.rgb = RGBColor(200, 200, 200)
+    doc.add_paragraph()
     
     return doc
 
@@ -82,113 +77,26 @@ def clean_text(text: str) -> str:
     
     text = text.strip()
     
-    # Faqat maxsus belgilar bo'lsa
     if not any(c.isalnum() for c in text) and len(text) < 15:
         return ""
     
-    # Takrorlanuvchi belgilar
     if re.match(r'^[\.\-\s\=\_\~\|]{5,}$', text):
         return ""
     
-    # URL yoki email formatidagi suv belgilari
-    if re.match(r'^(www\.|http|@)', text) and len(text) < 20:
-        return ""
-    
-    # Ko'p sonli bo'sh joylar
     text = re.sub(r'\s+', ' ', text)
     
     return text
 
-def add_formatted_text(doc: Document, text: str):
-    """Formatlangan matn qo'shish"""
-    paragraphs = text.split('\n')
-    for para_text in paragraphs:
-        cleaned = clean_text(para_text)
-        if cleaned:
-            # Juda uzun satrlarni paragraf qilish
-            if len(cleaned) > 200:
-                # Gap bo'yicha bo'lish
-                sentences = cleaned.replace('. ', '.\n').split('\n')
-                for sentence in sentences:
-                    if sentence.strip():
-                        doc.add_paragraph(sentence.strip())
-            else:
-                doc.add_paragraph(cleaned)
-
-# =============== RASMDAN MATN (SIFATLI OCR) ===============
-def image_ocr_quality(image: Image.Image) -> str:
-    """Sifatli OCR"""
-    try:
-        # Katta rasmlarni kichiklashtirish
-        max_size = 2500
-        if image.width > max_size or image.height > max_size:
-            ratio = min(max_size / image.width, max_size / image.height)
-            new_size = (int(image.width * ratio), int(image.height * ratio))
-            image = image.resize(new_size, Image.LANCZOS)
-        
-        # Kulrang formatga o'tkazish
-        if image.mode != 'L':
-            image = image.convert('L')
-        
-        # Kontrast oshirish
-        from PIL import ImageEnhance
-        enhancer = ImageEnhance.Contrast(image)
-        image = enhancer.enhance(2.5)
-        
-        # Keskinlik oshirish
-        enhancer = ImageEnhance.Sharpness(image)
-        image = enhancer.enhance(2.0)
-        
-        # OCR — avval inglizcha, topilmasa ruscha
-        text = pytesseract.image_to_string(image, lang='eng+rus+uzb', config='--psm 6')
-        
-        if not text.strip():
-            # Boshqa konfiguratsiya bilan qayta urinish
-            text = pytesseract.image_to_string(image, lang='eng+rus+uzb', config='--psm 3')
-        
-        return text.strip()
-    except Exception as e:
-        logger.error(f"OCR xatolik: {e}")
-        return ""
-
-# =============== PDF ICHIDAGI RASMLARNI AJRATISH ===============
-def extract_images_from_pdf(pdf_content: bytes) -> list:
-    """PDF ichidagi rasmlarni ajratib olish va OCR qilish"""
-    try:
-        from pdf2image import convert_from_bytes
-        from PyPDF2 import PdfReader
-        
-        images_text = []
-        
-        # pdf2image orqali har bir sahifani rasmga aylantirish
-        pdf_images = convert_from_bytes(
-            pdf_content,
-            dpi=200,
-            fmt='jpeg',
-            thread_count=2
-        )
-        
-        for page_num, image in enumerate(pdf_images, 1):
-            text = image_ocr_quality(image)
-            if text:
-                images_text.append((page_num, text))
-        
-        return images_text
-    except Exception as e:
-        logger.error(f"PDF rasm ajratish xatolik: {e}")
-        return []
-
-# =============== PDF → WORD (KENGAYTIRILGAN) ===============
-def pdf_to_word_pro(pdf_content: bytes, original_name: str) -> BytesIO:
-    """Professional PDF to Word — matn + jadvallar + rasmlar"""
-    doc = create_quality_document("📄 PDF Hujjat", original_name)
+# =============== PDF → WORD (pdfplumber) ===============
+def pdf_to_word(pdf_content: bytes, original_name: str) -> BytesIO:
+    """PDF ni Word ga o'tkazish"""
+    doc = create_doc("📄 PDF Hujjat", original_name)
     
     temp_pdf = tempfile.NamedTemporaryFile(suffix='.pdf', delete=False)
     temp_pdf.write(pdf_content)
     temp_pdf.close()
     
     try:
-        # 1. Avval pdfplumber orqali matn va jadvallarni olish
         with pdfplumber.open(temp_pdf.name) as pdf:
             total_pages = len(pdf.pages)
             
@@ -196,75 +104,55 @@ def pdf_to_word_pro(pdf_content: bytes, original_name: str) -> BytesIO:
                 if total_pages > 1:
                     doc.add_heading(f'Sahifa {page_num}', level=1)
                 
-                # Matn olish — yaxshilangan sozlamalar
-                text = page.extract_text(
-                    x_tolerance=3,
-                    y_tolerance=3,
-                    keep_blank_chars=False,
-                    use_text_flow=True,
-                    extra_attrs=[]
-                )
-                
-                if text and len(text.strip()) > 20:
-                    add_formatted_text(doc, text)
+                # Matn olish
+                try:
+                    text = page.extract_text(
+                        x_tolerance=3,
+                        y_tolerance=3
+                    )
+                    
+                    if text and len(text.strip()) > 10:
+                        for para in text.split('\n'):
+                            cleaned = clean_text(para)
+                            if cleaned:
+                                doc.add_paragraph(cleaned)
+                except:
+                    pass
                 
                 # Jadvallar
-                tables = page.extract_tables()
-                if tables:
-                    for table_data in tables:
-                        if table_data:
-                            has_content = any(
-                                cell and str(cell).strip()
-                                for row in table_data
-                                for cell in row if cell
-                            )
-                            
-                            if has_content and len(table_data) > 1:
-                                rows = len(table_data)
-                                cols = max(len(row) for row in table_data if row)
+                try:
+                    tables = page.extract_tables()
+                    if tables:
+                        for table_data in tables:
+                            if table_data and len(table_data) > 1:
+                                has_content = any(
+                                    cell and str(cell).strip()
+                                    for row in table_data
+                                    for cell in row if cell
+                                )
                                 
-                                if cols > 0:
+                                if has_content:
                                     doc.add_paragraph()
-                                    table = doc.add_table(rows=rows, cols=cols)
-                                    table.style = 'Light Grid Accent 1'
+                                    rows = len(table_data)
+                                    cols = max(len(row) for row in table_data if row)
                                     
-                                    for i, row in enumerate(table_data):
-                                        for j in range(cols):
-                                            if j < len(row) and row[j]:
-                                                cell_text = clean_text(str(row[j]))
-                                                if cell_text:
-                                                    table.cell(i, j).text = cell_text
-                                    
-                                    doc.add_paragraph()
+                                    if cols > 0:
+                                        table = doc.add_table(rows=rows, cols=cols)
+                                        table.style = 'Light Grid Accent 1'
+                                        
+                                        for i, row in enumerate(table_data):
+                                            for j in range(cols):
+                                                if j < len(row) and row[j]:
+                                                    cell_text = clean_text(str(row[j]))
+                                                    if cell_text:
+                                                        table.cell(i, j).text = cell_text
+                                        
+                                        doc.add_paragraph()
+                except:
+                    pass
                 
                 if page_num < total_pages:
                     doc.add_page_break()
-        
-        # 2. PDF dan rasmlarni ajratib olish va OCR qilish
-        try:
-            from pdf2image import convert_from_bytes
-            
-            pdf_images = convert_from_bytes(
-                pdf_content,
-                dpi=200,
-                fmt='jpeg',
-                thread_count=1
-            )
-            
-            # Har bir sahifani rasm sifatida tekshirish
-            for page_num, image in enumerate(pdf_images, 1):
-                ocr_text = image_ocr_quality(image)
-                
-                if ocr_text and len(ocr_text.strip()) > 30:
-                    # Agar pdfplumber matn topmagan bo'lsa yoki kam matn topgan bo'lsa
-                    doc.add_heading(f'Sahifa {page_num} (Rasm skan)', level=1)
-                    add_formatted_text(doc, ocr_text)
-                    
-                    if page_num < len(pdf_images):
-                        doc.add_page_break()
-        except:
-            logger.warning("pdf2image ishlamadi — faqat matn olinadi")
-        
     finally:
         os.unlink(temp_pdf.name)
     
@@ -274,10 +162,10 @@ def pdf_to_word_pro(pdf_content: bytes, original_name: str) -> BytesIO:
     return output
 
 # =============== EXCEL → WORD ===============
-def excel_to_word_quality(file_content: bytes, file_ext: str, original_name: str) -> BytesIO:
+def excel_to_word(file_content: bytes, file_ext: str, original_name: str) -> BytesIO:
     import pandas as pd
     
-    doc = create_quality_document("📊 Excel Ma'lumotlari", original_name)
+    doc = create_doc("📊 Excel Ma'lumotlari", original_name)
     
     try:
         if file_ext == 'csv':
@@ -288,9 +176,7 @@ def excel_to_word_quality(file_content: bytes, file_ext: str, original_name: str
         df = df.dropna(how='all', axis=1)
         df = df.dropna(how='all', axis=0)
         
-        if len(df) == 0:
-            doc.add_paragraph("Ma'lumot topilmadi.")
-        else:
+        if len(df) > 0:
             info_para = doc.add_paragraph()
             info_run = info_para.add_run(f"Qatorlar: {len(df)} | Ustunlar: {len(df.columns)}")
             info_run.font.size = Pt(10)
@@ -318,6 +204,8 @@ def excel_to_word_quality(file_content: bytes, file_ext: str, original_name: str
                     for paragraph in cell.paragraphs:
                         for run in paragraph.runs:
                             run.font.size = Pt(10)
+        else:
+            doc.add_paragraph("Ma'lumot topilmadi.")
     except Exception as e:
         doc.add_paragraph(f"Xatolik: {str(e)[:100]}")
     
@@ -327,16 +215,13 @@ def excel_to_word_quality(file_content: bytes, file_ext: str, original_name: str
     return output
 
 # =============== MATN → WORD ===============
-def text_to_word_quality(text: str) -> BytesIO:
-    doc = create_quality_document("📝 Matn Hujjati")
+def text_to_word(text: str) -> BytesIO:
+    doc = create_doc("📝 Matn Hujjati")
     
-    info_para = doc.add_paragraph()
-    info_run = info_para.add_run(f"Belgilar soni: {len(text)}")
-    info_run.font.size = Pt(9)
-    info_run.font.color.rgb = RGBColor(128, 128, 128)
-    
-    doc.add_paragraph()
-    add_formatted_text(doc, text)
+    for para in text.split('\n'):
+        cleaned = clean_text(para)
+        if cleaned:
+            doc.add_paragraph(cleaned)
     
     output = BytesIO()
     doc.save(output)
@@ -344,19 +229,22 @@ def text_to_word_quality(text: str) -> BytesIO:
     return output
 
 # =============== HTML → WORD ===============
-def html_to_word_quality(file_content: bytes, original_name: str) -> BytesIO:
+def html_to_word(file_content: bytes, original_name: str) -> BytesIO:
     from bs4 import BeautifulSoup
     
-    doc = create_quality_document("🌐 HTML Hujjat", original_name)
+    doc = create_doc("🌐 HTML Hujjat", original_name)
     
-    html = file_content.decode('utf-8')
+    html = file_content.decode('utf-8', errors='ignore')
     soup = BeautifulSoup(html, 'html.parser')
     
     for script in soup(["script", "style"]):
         script.decompose()
     
     text = soup.get_text()
-    add_formatted_text(doc, text)
+    for para in text.split('\n'):
+        cleaned = clean_text(para)
+        if cleaned:
+            doc.add_paragraph(cleaned)
     
     output = BytesIO()
     doc.save(output)
@@ -364,11 +252,11 @@ def html_to_word_quality(file_content: bytes, original_name: str) -> BytesIO:
     return output
 
 # =============== EPUB → WORD ===============
-def epub_to_word_quality(file_content: bytes, original_name: str) -> BytesIO:
+def epub_to_word(file_content: bytes, original_name: str) -> BytesIO:
     from ebooklib import epub
     from bs4 import BeautifulSoup
     
-    doc = create_quality_document("📚 Elektron Kitob", original_name)
+    doc = create_doc("📚 Elektron Kitob", original_name)
     
     temp_epub = tempfile.NamedTemporaryFile(suffix='.epub', delete=False)
     temp_epub.write(file_content)
@@ -388,7 +276,10 @@ def epub_to_word_quality(file_content: bytes, original_name: str) -> BytesIO:
                 if text.strip():
                     chapter_num += 1
                     doc.add_heading(f'Bo\'lim {chapter_num}', level=1)
-                    add_formatted_text(doc, text)
+                    for para in text.split('\n'):
+                        cleaned = clean_text(para)
+                        if cleaned:
+                            doc.add_paragraph(cleaned)
                     doc.add_page_break()
     finally:
         os.unlink(temp_epub.name)
@@ -397,6 +288,25 @@ def epub_to_word_quality(file_content: bytes, original_name: str) -> BytesIO:
     doc.save(output)
     output.seek(0)
     return output
+
+# =============== RASM OCR ===============
+def image_ocr(image_content: bytes) -> str:
+    """Rasmdan matn olish"""
+    try:
+        image = Image.open(BytesIO(image_content))
+        
+        if image.mode != 'L':
+            image = image.convert('L')
+        
+        from PIL import ImageEnhance
+        enhancer = ImageEnhance.Contrast(image)
+        image = enhancer.enhance(2.0)
+        
+        text = pytesseract.image_to_string(image, lang='eng+rus', config='--psm 6')
+        return text.strip()
+    except Exception as e:
+        logger.error(f"OCR xatolik: {e}")
+        return ""
 
 # =============== BOT HANDLERLARI ===============
 
@@ -409,7 +319,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 📌 Quyidagi formatlarni Word (.docx) ga o'tkazadi:
 
-📄 PDF hujjatlar (matn + rasm + jadvallar)
+📄 PDF hujjatlar
 📊 Excel jadvallari (.xlsx, .xls, .csv)
 🌐 HTML sahifalar
 📚 EPUB elektron kitoblar
@@ -421,10 +331,9 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 2️⃣ Konvertatsiya avtomatik
 3️⃣ Word faylni yuklab oling
 
-📌 Cheklovlar:
-🔹 Maksimal hajm: 50 MB
-🔹 24/7 ishlaydi
-🔹 Bepul ✅
+📌 Maksimal hajm: 50 MB
+📌 24/7 ishlaydi
+📌 Bepul ✅
 
 📋 Buyruqlar:
 /start — Bosh menyu
@@ -439,28 +348,14 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = f"""📖 YORDAM
 
-📝 1. MATN
-Oddiy matn yozing — Word faylga o'tkaziladi.
+📝 1. MATN — matn yozing, Word faylga o'tkaziladi
+📄 2. PDF — PDF fayl yuboring
+📊 3. EXCEL — .xlsx, .xls, .csv yuboring
+🌐 4. HTML — .html fayl yuboring
+📚 5. EPUB — elektron kitob yuboring
+🖼 6. RASM — matnli rasm yuboring
 
-📄 2. PDF
-PDF fayl yuboring. Matn, jadvallar va rasmlar qayta ishlanadi.
-• Oddiy PDF: matn va jadvallar olinadi
-• Skanerlangan PDF: OCR orqali matn ajratiladi
-
-📊 3. EXCEL
-.xlsx, .xls, .csv fayllarni yuboring.
-
-🌐 4. HTML
-.html fayllarni yuboring.
-
-📚 5. EPUB
-Elektron kitoblarni yuboring.
-
-🖼 6. RASM
-Matnli rasm yuboring. OCR orqali matn ajratiladi.
-
-⚠️ Fayl hajmi 50 MB dan oshmasin.
-
+⚠️ Fayl hajmi 50 MB dan oshmasin
 📞 Admin: {ADMIN_USERNAME}"""
 
     await update.message.reply_text(message)
@@ -468,20 +363,12 @@ Matnli rasm yuboring. OCR orqali matn ajratiladi.
 async def formats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = f"""📋 FORMATLAR
 
-📄 Hujjatlar:
-• .pdf — PDF (matn + rasm + jadvallar)
-• .xlsx, .xls, .csv — Excel jadvallari
-• .html, .htm — Web sahifalar
-
-📚 Kitoblar:
-• .epub — Elektron kitoblar
-
-📝 Matn:
-• Oddiy matn
-• .txt, .md, .json, .xml
-
-🖼 Rasmlar (OCR):
-• .jpg, .png, .bmp
+📄 .pdf — PDF hujjatlar
+📊 .xlsx, .xls, .csv — Excel
+🌐 .html, .htm — Web sahifalar
+📚 .epub — Elektron kitoblar
+📝 .txt, .md, .json, .xml — Matn
+🖼 .jpg, .png, .bmp — Rasmlar
 
 ✅ Barchasi → .docx"""
 
@@ -492,19 +379,14 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⛔ Faqat admin uchun.")
         return
     
-    message = f"""👑 ADMIN PANEL
-
-🟢 Holat: Aktiv
-👨‍💼 Admin: {ADMIN_USERNAME}"""
-
-    await update.message.reply_text(message)
+    await update.message.reply_text(f"👑 ADMIN PANEL\n\n🟢 Holat: Aktiv\n👨‍💼 {ADMIN_USERNAME}")
 
 async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = f"""ℹ️ BOT HAQIDA
 
 🏷 {BOT_NAME}
 
-💼 Fayllarni Microsoft Word (.docx) formatiga professional o'tkazish uchun yaratilgan.
+💼 Fayllarni Microsoft Word (.docx) formatiga o'tkazish uchun professional bot.
 
 👨‍💼 {ADMIN_USERNAME}
 📞 {ADMIN_USERNAME}"""
@@ -526,25 +408,26 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ .{file_ext} qo'llab-quvvatlanmaydi.\n📋 /formats")
         return
     
-    msg = await update.message.reply_text(f"⏳ {file_name} qayta ishlanmoqda...\nBu biroz vaqt olishi mumkin.")
+    msg = await update.message.reply_text(f"⏳ {file_name} qayta ishlanmoqda...")
     
     try:
         file = await document.get_file()
         content = await file.download_as_bytearray()
         output_name = file_name.rsplit('.', 1)[0] + '.docx'
         
+        logger.info(f"Konvertatsiya: {file_name} ({file_ext}) — {len(content)} bytes")
+        
         if file_ext == 'pdf':
-            msg = await msg.edit_text("📄 PDF qayta ishlanmoqda: matn va rasmlar olinmoqda...")
-            output = pdf_to_word_pro(content, file_name)
+            output = pdf_to_word(bytes(content), file_name)
         elif file_ext in ['xlsx', 'xls', 'csv']:
-            output = excel_to_word_quality(content, file_ext, file_name)
+            output = excel_to_word(bytes(content), file_ext, file_name)
         elif file_ext in ['html', 'htm']:
-            output = html_to_word_quality(content, file_name)
+            output = html_to_word(bytes(content), file_name)
         elif file_ext == 'epub':
-            output = epub_to_word_quality(content, file_name)
+            output = epub_to_word(bytes(content), file_name)
         else:
-            text = content.decode('utf-8')
-            output = text_to_word_quality(text)
+            text = content.decode('utf-8', errors='ignore')
+            output = text_to_word(text)
         
         await msg.delete()
         await update.message.reply_document(
@@ -555,8 +438,12 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     except Exception as e:
         await msg.delete()
-        logger.error(f"Xatolik: {e}")
-        await update.message.reply_text(f"❌ Xatolik yuz berdi.\n📞 {ADMIN_USERNAME}")
+        logger.error(f"Xatolik ({file_name}): {e}")
+        await update.message.reply_text(
+            f"❌ Xatolik yuz berdi.\n\n"
+            f"📎 Fayl: {file_name}\n"
+            f"📞 Admin: {ADMIN_USERNAME}"
+        )
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = await update.message.reply_text("🖼 Rasm qayta ishlanmoqda...")
@@ -566,11 +453,10 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         file = await photo.get_file()
         content = await file.download_as_bytearray()
         
-        image = Image.open(BytesIO(content))
-        text = image_ocr_quality(image)
+        text = image_ocr(bytes(content))
         
         if text and len(text.strip()) > 10:
-            output = text_to_word_quality(text)
+            output = text_to_word(text)
             await msg.delete()
             await update.message.reply_document(
                 document=output,
@@ -583,26 +469,26 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "⚠️ Rasmdan matn topilmadi.\n\n"
                 "📌 Sabablar:\n"
                 "• Rasmda matn yo'q\n"
-                "• Sifatsiz rasm\n"
+                "• Rasm sifatsiz\n"
                 "• Qo'l yozuvi\n\n"
-                "💡 Aniqroq, bosma matnli rasm yuboring."
+                "💡 Aniq, bosma matnli rasm yuboring."
             )
     except Exception as e:
         await msg.delete()
-        logger.error(f"Xatolik: {e}")
+        logger.error(f"Rasm xatolik: {e}")
         await update.message.reply_text(f"❌ Xatolik.\n📞 {ADMIN_USERNAME}")
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     
     if len(text) < 10:
-        await update.message.reply_text("⚠️ Kamida 10 ta belgi kerak.\n📖 /help")
+        await update.message.reply_text("⚠️ Kamida 10 ta belgi kerak.")
         return
     
     msg = await update.message.reply_text("⏳ Matn qayta ishlanmoqda...")
     
     try:
-        output = text_to_word_quality(text)
+        output = text_to_word(text)
         await msg.delete()
         await update.message.reply_document(
             document=output,
@@ -611,16 +497,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     except Exception as e:
         await msg.delete()
-        logger.error(f"Xatolik: {e}")
+        logger.error(f"Matn xatolik: {e}")
         await update.message.reply_text("❌ Xatolik yuz berdi.")
-
-async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.error(f"Xatolik: {context.error}")
-    try:
-        if update and update.effective_message:
-            await update.effective_message.reply_text(f"❌ Xatolik.\n📞 {ADMIN_USERNAME}")
-    except:
-        pass
 
 # =============== MAIN ===============
 def main():
@@ -642,14 +520,16 @@ def main():
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     
-    app.add_error_handler(error_handler)
+    app.add_error_handler(lambda update, context: logger.error(f"Xatolik: {context.error}"))
     
     WEBHOOK_URL = os.getenv("WEBHOOK_URL", "")
     PORT = int(os.getenv("PORT", "8080"))
     
     if WEBHOOK_URL:
+        logger.info(f"🌐 Webhook: {WEBHOOK_URL}")
         app.run_webhook(listen="0.0.0.0", port=PORT, webhook_url=f"{WEBHOOK_URL}/webhook", drop_pending_updates=True)
     else:
+        logger.info("📡 Polling rejimi")
         app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
