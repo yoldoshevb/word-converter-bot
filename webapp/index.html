@@ -417,7 +417,6 @@
     </div>
 
     <div class="toast" id="toast"></div>
-
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     
     <script>
@@ -608,7 +607,6 @@
             }, 200);
 
             try {
-                // API call would go here
                 await new Promise(r => setTimeout(r, 2500));
 
                 clearInterval(interval);
@@ -626,12 +624,14 @@
                     actionBtn.disabled = false;
                     showToast('Conversion completed!', 'success');
 
-               tg.showPopup({
-    title: 'Conversion Complete',
-    message: 'File is ready! Check your Telegram bot for the result.',
-    buttons: [{type: 'ok'}]
-});     
-                    }));
+                    // Popup ko'rsatish (Web App yopilmaydi)
+                    if (tg.showPopup) {
+                        tg.showPopup({
+                            title: 'Conversion Complete',
+                            message: 'Your file has been converted to Word format!',
+                            buttons: [{type: 'ok'}]
+                        });
+                    }
                 }, 400);
             } catch (err) {
                 clearInterval(interval);
@@ -652,7 +652,7 @@
             toast._timeout = setTimeout(() => toast.classList.remove('show'), 3000);
         }
 
-        // ============ DOWNLOAD (simulated) ============
+        // ============ DOWNLOAD ============
         downloadBtn.addEventListener('click', (e) => {
             sfxClick();
             if (haptic) haptic.impactOccurred('light');
@@ -678,7 +678,7 @@
             if (t.button_color) document.documentElement.style.setProperty('--accent', t.button_color);
         });
 
-        console.log('%cFile Converter Pro v3.0%c Ready', 'font-weight:700;color:#3b82f6;', 'color:#a1a1a6;');
-    </script>
+        console.log('File Converter Pro v3.0 Ready');
+    </script>    
 </body>
 </html>
