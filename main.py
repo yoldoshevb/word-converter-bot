@@ -203,8 +203,11 @@ def looks_like_heading(block, body_font_size: float = 11.0) -> bool:
 
 
 # =============== PDF → WORD (PyMuPDF bilan: matn + formatlash + rasmlar) ===============
-def pdf_to_word(pdf_content: bytes, original_name: str) -> BytesIO:
-    """PDF ni Word ga o'tkazish: matn formatlash (bold/o'lcham), jadval, va sahifadagi rasmlarni saqlab"""
+def pdf_to_word(pdf_content: bytes, original_name: str, progress_cb=None) -> BytesIO:
+    """PDF ni Word ga o'tkazish: matn formatlash (bold/o'lcham), jadval, va sahifadagi rasmlarni saqlab.
+
+    progress_cb(current_page, total_pages) — har sahifadan keyin chaqiriladi (progress-bar uchun).
+    """
     doc = create_doc("📄 PDF Hujjat", original_name)
 
     pdf = fitz.open(stream=pdf_content, filetype="pdf")
@@ -224,14 +227,32 @@ def pdf_to_word(pdf_content: bytes, original_name: str) -> BytesIO:
             marker_run.font.color.rgb = RGBColor(190, 190, 190)
 
         # ---------- 0. Avval jadval hududlarini aniqlab olamiz (matn bilan dublikat bo'lmasligi uchun) ----------
+        # MUHIM: find_tables() ba'zi murakkab (ko'p vektor grafikali) sahifalarda juda sekin ishlaydi
+        # va butun botni "osilib qolgandek" his qildiradi. Shuning uchun har sahifa uchun vaqt chegarasi
+        # qo'yamiz: agar sahifa juda murakkab bo'lsa, jadval qidirishni shunchaki o'tkazib yuboramiz
+        # (matn va rasmlar baribir chiqadi — hujjat "chala" emas, faqat jadval formatlanmagan bo'ladi).
         table_rects = []
         tabs = None
+        page_start = datetime.now()
         try:
-            tabs = page.find_tables()
-            for table_obj in tabs.tables:
-                table_rects.append(fitz.Rect(table_obj.bbox))
+            # Sahifada juda ko'p chizilgan element (vektor grafika) bo'lsa, find_tables() sekinlashadi —
+            # bunday hollarda oldindan o'tkazib yuboramiz.
+            drawings_count = len(page.get_drawings())
+            if drawings_count < 800:
+                tabs = page.find_tables()
+                for table_obj in tabs.tables:
+                    table_rects.append(fitz.Rect(table_obj.bbox))
+            else:
+                logger.warning(
+                    f"Sahifa {page_num + 1} juda murakkab ({drawings_count} chizilgan element) — "
+                    f"jadval qidirish o'tkazib yuborildi ({original_name})"
+                )
         except Exception as e:
             logger.warning(f"Jadval qidirishda xatolik (sahifa {page_num + 1}, {original_name}): {e}")
+        finally:
+            elapsed = (datetime.now() - page_start).total_seconds()
+            if elapsed > 5:
+                logger.warning(f"Sahifa {page_num + 1} jadval qidirish {elapsed:.1f}s vaqt oldi ({original_name})")
 
         def inside_table(bbox):
             r = fitz.Rect(bbox)
@@ -387,6 +408,12 @@ def pdf_to_word(pdf_content: bytes, original_name: str) -> BytesIO:
 
         if page_num < total_pages - 1:
             doc.add_page_break()
+
+        if progress_cb:
+            try:
+                progress_cb(page_num + 1, total_pages)
+            except Exception as e:
+                logger.warning(f"Progress callback xatolik: {e}")
 
     pdf.close()
 
@@ -643,7 +670,8 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("📖 Yordam", callback_data="help"),
          InlineKeyboardButton("📋 Formatlar", callback_data="formats")],
-        [InlineKeyboardButton("ℹ️ Bot haqida", callback_data="about")],
+        [InlineKeyboardButton("ℹ️ Bot haqida", callback_data="about"),
+         InlineKeyboardButton("📩 Murojaat", callback_data="contact_admin")],
     ])
 
 
@@ -661,6 +689,7 @@ HELP_TEXT = f"""📖 YORDAM
 🖼 6. RASM — matnli rasm yuboring (OCR → Word)
 📄 7. RASM(LAR) → PDF — /rasm_pdf buyrug'ini yuboring, keyin rasmlarni jo'nating
 ✏️ 8. Har bir natija ostida "Nomini o'zgartirish" tugmasi bor
+📩 9. Admin bilan bog'lanish — "📩 Murojaat" tugmasi yoki istalgan vaqt /cancel bilan bekor qiling
 
 ⚠️ Fayl hajmi 50 MB dan oshmasin
 📞 Admin: {ADMIN_USERNAME}"""
@@ -736,6 +765,14 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 Fayl yoki matn yuboring — avtomatik Word'ga o'tkazaman.
 Yoki quyidagi tugmalardan foydalaning 👇"""
         await query.edit_message_text(message, reply_markup=main_menu_keyboard())
+
+    elif query.data == "contact_admin":
+        context.user_data['awaiting_contact_message'] = True
+        await query.message.reply_text(
+            "📩 Murojaat yuborish\n\n"
+            "Xabaringizni yozing (taklif, shikoyat, savol va h.k.) — to'g'ridan-to'g'ri adminga yuboriladi.\n"
+            "Bekor qilish uchun /cancel yuboring."
+        )
 
     elif query.data == "rename":
         if not context.user_data.get('last_output_bytes'):
@@ -816,6 +853,19 @@ async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(ABOUT_TEXT, reply_markup=back_keyboard())
 
 
+def make_progress_bar(current: int, total: int, width: int = 12) -> str:
+    if total <= 0:
+        return ""
+    ratio = current / total
+    filled = int(ratio * width)
+    bar = "■" * filled + "□" * (width - filled)
+    percent = int(ratio * 100)
+    return f"[{bar}] {current}/{total} sahifa ({percent}%)"
+
+
+PDF_TIMEOUT_SECONDS = int(os.getenv("PDF_TIMEOUT_SECONDS", "240"))
+
+
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     document = update.message.document
     file_name = document.file_name
@@ -841,19 +891,62 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         output_name = file_name.rsplit('.', 1)[0] + '.docx'
 
         logger.info(f"Konvertatsiya: {file_name} ({file_ext}) — {len(content)} bytes")
-        await msg.edit_text(f"⚙️ {file_name} konvertatsiya qilinmoqda... Bu biroz vaqt olishi mumkin.")
 
-        # Og'ir CPU ishini alohida thread'ga chiqaramiz — bot shu vaqtda boshqa
-        # foydalanuvchilarga ham javob bera oladi (bloklanib qolmaydi)
         if file_ext == 'pdf':
-            output = await asyncio.to_thread(pdf_to_word, bytes(content), file_name)
+            # ---------- Real progress-bar: worker thread'dan asosiy loopga xabar yuborish ----------
+            loop = asyncio.get_running_loop()
+            last_edit = {"time": datetime.min, "text": ""}
+
+            async def update_progress_msg(text: str):
+                # Telegram FloodWait'ga uchramaslik uchun kamida 2 soniyada bir marta yangilaymiz,
+                # va bir xil matnni qayta yubormaymiz ("message is not modified" xatosi oldini olish)
+                now = datetime.now()
+                if text == last_edit["text"] or (now - last_edit["time"]).total_seconds() < 2:
+                    return
+                last_edit["time"] = now
+                last_edit["text"] = text
+                try:
+                    await msg.edit_text(text)
+                except Exception:
+                    pass  # mas. "message is not modified" — e'tiborsiz qoldiramiz
+
+            def sync_progress(current: int, total: int):
+                bar = make_progress_bar(current, total)
+                text = f"⚙️ {file_name} konvertatsiya qilinmoqda...\n{bar}"
+                asyncio.run_coroutine_threadsafe(update_progress_msg(text), loop)
+
+            await msg.edit_text(f"⚙️ {file_name} konvertatsiya qilinmoqda...\n{make_progress_bar(0, 1)}")
+
+            try:
+                output = await asyncio.wait_for(
+                    asyncio.to_thread(pdf_to_word, bytes(content), file_name, sync_progress),
+                    timeout=PDF_TIMEOUT_SECONDS
+                )
+            except asyncio.TimeoutError:
+                await msg.delete()
+                log_conversion(user.id, file_ext, file_name, success=False)
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📩 Admin bilan bog'lanish", callback_data="contact_admin")]
+                ])
+                await update.message.reply_text(
+                    f"⏱ {file_name} konvertatsiyasi {PDF_TIMEOUT_SECONDS} soniyadan ko'p vaqt oldi va "
+                    f"to'xtatildi.\n\n"
+                    f"📌 Sabab odatda: PDF juda murakkab (ko'p grafika/skanerlangan sahifalar) yoki juda katta.\n"
+                    f"💡 Faylni kichikroq qismlarga bo'lib yuborib ko'ring, yoki admin bilan bog'laning.",
+                    reply_markup=keyboard
+                )
+                return
         elif file_ext in ['xlsx', 'xls', 'csv']:
+            await msg.edit_text(f"⚙️ {file_name} konvertatsiya qilinmoqda...")
             output = await asyncio.to_thread(excel_to_word, bytes(content), file_ext, file_name)
         elif file_ext in ['html', 'htm']:
+            await msg.edit_text(f"⚙️ {file_name} konvertatsiya qilinmoqda...")
             output = await asyncio.to_thread(html_to_word, bytes(content), file_name)
         elif file_ext == 'epub':
+            await msg.edit_text(f"⚙️ {file_name} konvertatsiya qilinmoqda...")
             output = await asyncio.to_thread(epub_to_word, bytes(content), file_name)
         else:
+            await msg.edit_text(f"⚙️ {file_name} konvertatsiya qilinmoqda...")
             text = content.decode('utf-8', errors='ignore')
             output = await asyncio.to_thread(text_to_word, text)
 
@@ -868,11 +961,14 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.delete()
         logger.error(f"Xatolik ({file_name}): {e}", exc_info=True)
         log_conversion(user.id, file_ext, file_name, success=False)
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📩 Admin bilan bog'lanish", callback_data="contact_admin")]
+        ])
         await update.message.reply_text(
             f"❌ Xatolik yuz berdi.\n\n"
             f"📎 Fayl: {file_name}\n"
-            f"⚠️ Sabab: {str(e)[:150]}\n"
-            f"📞 Admin: {ADMIN_USERNAME}"
+            f"⚠️ Sabab: {str(e)[:150]}",
+            reply_markup=keyboard
         )
 
 
@@ -946,6 +1042,28 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     log_user(user.id, user.username or user.first_name)
 
+    # ---------- Agar foydalanuvchidan murojaat (admin'ga xabar) kutilayotgan bo'lsa ----------
+    if context.user_data.get('awaiting_contact_message'):
+        context.user_data['awaiting_contact_message'] = False
+        username_display = f"@{user.username}" if user.username else user.first_name
+        try:
+            await context.bot.send_message(
+                ADMIN_ID,
+                f"📩 YANGI MUROJAAT\n\n"
+                f"👤 Foydalanuvchi: {username_display}\n"
+                f"🆔 ID: {user.id}\n\n"
+                f"💬 Xabar:\n{text}\n\n"
+                f"↩️ Javob berish uchun: /reply {user.id} <matn>"
+            )
+            await update.message.reply_text(
+                "✅ Murojaatingiz adminga yuborildi. Tez orada javob olasiz.",
+                reply_markup=back_keyboard()
+            )
+        except Exception as e:
+            logger.error(f"Murojaatni yuborishda xatolik: {e}", exc_info=True)
+            await update.message.reply_text("❌ Murojaatni yuborib bo'lmadi. Birozdan keyin qayta urinib ko'ring.")
+        return
+
     # ---------- Agar foydalanuvchidan yangi fayl nomi kutilayotgan bo'lsa ----------
     if context.user_data.get('awaiting_rename'):
         context.user_data['awaiting_rename'] = False
@@ -990,6 +1108,42 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Xatolik yuz berdi.")
 
 
+async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['awaiting_contact_message'] = False
+    context.user_data['awaiting_rename'] = False
+    context.user_data['collecting_pdf'] = False
+    await update.message.reply_text("❌ Bekor qilindi.", reply_markup=main_menu_keyboard())
+
+
+async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin foydalanuvchi murojaatiga javob berish: /reply <user_id> <matn>"""
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("⛔ Faqat admin uchun.")
+        return
+
+    args = context.args
+    if len(args) < 2:
+        await update.message.reply_text("Foydalanish: /reply <user_id> <javob matni>")
+        return
+
+    try:
+        target_id = int(args[0])
+    except ValueError:
+        await update.message.reply_text("⚠️ user_id raqam bo'lishi kerak.")
+        return
+
+    reply_text = " ".join(args[1:])
+    try:
+        await context.bot.send_message(
+            target_id,
+            f"📩 ADMIN JAVOBI:\n\n{reply_text}"
+        )
+        await update.message.reply_text("✅ Javob yuborildi.")
+    except Exception as e:
+        logger.error(f"Javob yuborishda xatolik: {e}", exc_info=True)
+        await update.message.reply_text(f"❌ Yuborib bo'lmadi: {str(e)[:150]}")
+
+
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
     logger.error(f"Xatolik: {context.error}", exc_info=context.error)
 
@@ -1008,6 +1162,8 @@ def main():
     app.add_handler(CommandHandler("stats", stats_command))
     app.add_handler(CommandHandler("about", about_command))
     app.add_handler(CommandHandler("rasm_pdf", rasm_pdf_command))
+    app.add_handler(CommandHandler("cancel", cancel_command))
+    app.add_handler(CommandHandler("reply", reply_command))
 
     app.add_handler(CallbackQueryHandler(menu_callback))
 
