@@ -5,6 +5,7 @@ import logging
 import tempfile
 import asyncio
 import sqlite3
+import threading
 from datetime import datetime
 from io import BytesIO
 
@@ -20,6 +21,8 @@ from telegram.ext import (
     Application, CommandHandler, MessageHandler, CallbackQueryHandler,
     filters, ContextTypes,
 )
+from flask import Flask, send_from_directory, request, jsonify, send_file
+from flask_cors import CORS
 
 # =============== LOGGING ===============
 logging.basicConfig(
@@ -40,6 +43,56 @@ MAX_FILE_SIZE = 50 * 1024 * 1024
 OCR_LANGS = os.getenv("OCR_LANGS", "uzb+rus+eng")
 DB_PATH = os.getenv("DB_PATH", "bot_stats.db")
 PDF_TIMEOUT_SECONDS = int(os.getenv("PDF_TIMEOUT_SECONDS", "240"))
+
+# =============== FLASK APP ===============
+flask_app = Flask(__name__, static_folder='webapp', static_url_path='')
+CORS(flask_app)
+
+@flask_app.route('/webapp')
+def serve_webapp():
+    return send_from_directory('webapp', 'index.html')
+
+@flask_app.route('/')
+def home():
+    return send_from_directory('webapp', 'index.html')
+
+@flask_app.route('/api/convert', methods=['POST'])
+def api_convert():
+    """Web App orqali fayl konvertatsiya qilish"""
+    try:
+        file = request.files.get('file')
+        if not file:
+            return jsonify({'error': 'Fayl topilmadi'}), 400
+        
+        content = file.read()
+        ext = file.filename.split('.')[-1].lower()
+        output_name = file.filename.rsplit('.', 1)[0] + '.docx'
+        
+        if ext == 'pdf':
+            output = pdf_to_word(content, file.filename)
+        elif ext in ['xlsx', 'xls', 'csv']:
+            output = excel_to_word(content, ext, file.filename)
+        elif ext in ['html', 'htm']:
+            output = html_to_word(content, file.filename)
+        elif ext == 'epub':
+            output = epub_to_word(content, file.filename)
+        else:
+            text = content.decode('utf-8', errors='ignore')
+            output = text_to_word(text)
+        
+        return send_file(
+            output,
+            download_name=output_name,
+            as_attachment=True,
+            mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        )
+    except Exception as e:
+        logger.error(f"API xatolik: {e}")
+        return jsonify({'error': str(e)[:200]}), 500
+
+def run_flask():
+    port = int(os.getenv("PORT", "8080"))
+    flask_app.run(host='0.0.0.0', port=port)
 
 # =============== SQLITE ===============
 def init_db():
@@ -1077,6 +1130,11 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
 def main():
     logger.info(f"🤖 {BOT_NAME} ishga tushmoqda...")
     init_db()
+    
+    # Flask serverni alohida thread'da ishga tushirish
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
+    logger.info("🌐 Flask Web App server ishga tushdi")
     
     app = Application.builder().token(TOKEN).build()
     
