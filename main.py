@@ -584,35 +584,109 @@ def epub_to_word(file_content: bytes, original_name: str) -> BytesIO:
 
 # =============== RASM(LAR) → PDF ===============
 def images_to_pdf(images_content: list) -> BytesIO:
-    """Bir nechta rasmni bitta PDF faylga birlashtirish"""
+    """Bir nechta rasmni bitta PDF faylga birlashtirish.
+    
+    Har bir rasm A4 o'lchamiga sig'diriladi, nisbat saqlanadi,
+    markazga joylashtiriladi. Rasmlar orasida yangi sahifa ochiladi.
+    """
     from PIL import Image
+    import tempfile
     
     if not images_content:
-        raise ValueError("Rasmlar topilmadi")
+        raise ValueError("Rasmlar topilmadi. Kamida bitta rasm yuboring.")
+    
+    # A4 o'lchami (points da: 1 point = 1/72 inch)
+    # A4 = 595.28 x 841.89 points
+    PAGE_WIDTH = 595.28
+    PAGE_HEIGHT = 841.89
+    MARGIN = 40  # har tomondan 40pt chegara
+    
+    # Rasm joylashtirish mumkin bo'lgan maksimal maydon
+    MAX_WIDTH = PAGE_WIDTH - (2 * MARGIN)
+    MAX_HEIGHT = PAGE_HEIGHT - (2 * MARGIN)
     
     pil_images = []
-    for content in images_content:
-        img = Image.open(BytesIO(content))
-        if img.mode != 'RGB':
-            img = img.convert('RGB')
-        pil_images.append(img)
+    temp_files = []
     
-    output = BytesIO()
-    
-    if len(pil_images) == 1:
-        # Bitta rasm bo'lsa
-        pil_images[0].save(output, format='PDF')
-    else:
-        # Ko'p rasm bo'lsa
-        pil_images[0].save(
-            output,
-            format='PDF',
-            save_all=True,
-            append_images=pil_images[1:]
-        )
-    
-    output.seek(0)
-    return output
+    try:
+        # Barcha rasmlarni PIL Image formatiga o'tkazish
+        for idx, content in enumerate(images_content):
+            try:
+                img = Image.open(BytesIO(content))
+                
+                # RGBA yoki boshqa formatlarni RGB ga o'tkazish
+                if img.mode not in ('RGB', 'L'):
+                    img = img.convert('RGB')
+                
+                pil_images.append(img)
+                
+            except Exception as e:
+                raise ValueError(f"{idx + 1}-rasmni ochib bo'lmadi: {str(e)[:50]}")
+        
+        # Agar faqat bitta rasm bo'lsa, to'g'ridan-to'g'ri PDF qilish
+        if len(pil_images) == 1:
+            output = BytesIO()
+            pil_images[0].save(output, format='PDF', resolution=150.0)
+            output.seek(0)
+            return output
+        
+        # Ko'p rasm bo'lsa — har birini alohida sahifaga joylashtirish
+        # Buning uchun PIL orqali yangi sahifalar yaratamiz va birlashtiramiz
+        pdf_pages = []
+        
+        for idx, img in enumerate(pil_images):
+            # Rasm o'lchamini olish
+            img_width, img_height = img.size
+            
+            # Rasmni sahifaga sig'dirish nisbatini hisoblash
+            width_ratio = MAX_WIDTH / img_width
+            height_ratio = MAX_HEIGHT / img_height
+            scale = min(width_ratio, height_ratio, 1.0)  # 1.0 dan katta bo'lmasin
+            
+            # Yangi o'lchamlar
+            new_width = int(img_width * scale)
+            new_height = int(img_height * scale)
+            
+            # Agar rasm kichik bo'lsa, kattalashtirmaslik
+            if new_width < 100 or new_height < 100:
+                new_width = img_width
+                new_height = img_height
+            
+            # Rasmni yangi o'lchamga o'zgartirish
+            if (new_width, new_height) != (img_width, img_height):
+                img_resized = img.resize((new_width, new_height), Image.LANCZOS)
+            else:
+                img_resized = img
+            
+            # Yangi oq A4 sahifa yaratish
+            page = Image.new('RGB', (int(PAGE_WIDTH), int(PAGE_HEIGHT)), 'white')
+            
+            # Rasmni markazga joylashtirish
+            x_offset = int((PAGE_WIDTH - new_width) / 2)
+            y_offset = int((PAGE_HEIGHT - new_height) / 2)
+            
+            # Rasmni sahifaga joylashtirish
+            page.paste(img_resized, (x_offset, y_offset))
+            
+            pdf_pages.append(page)
+        
+        # Barcha sahifalarni bitta PDF ga yig'ish
+        output = BytesIO()
+        
+        if pdf_pages:
+            pdf_pages[0].save(
+                output,
+                format='PDF',
+                resolution=150.0,
+                save_all=True,
+                append_images=pdf_pages[1:] if len(pdf_pages) > 1 else []
+            )
+        
+        output.seek(0)
+        return output
+        
+    except Exception as e:
+        raise ValueError(f"PDF yaratishda xatolik: {str(e)[:100]}")
 
 
 # =============== RASM OCR (yaxshilangan) ===============
