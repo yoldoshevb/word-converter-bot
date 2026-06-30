@@ -179,6 +179,29 @@ def clean_text(text: str) -> str:
     return text
 
 
+def looks_like_heading(block, body_font_size: float = 11.0) -> bool:
+    """Bir qatorli, qisqa, asosan bosh harfli yoki o'rtacha shriftdan kattaroq matnni
+    sarlavha (masalan, lug'at so'zi yoki bo'lim nomi) deb taxmin qiladi."""
+    lines = block.get("lines", [])
+    if len(lines) != 1:
+        return False
+
+    spans = lines[0].get("spans", [])
+    text = "".join(s["text"] for s in spans).strip()
+    if not text or len(text) > 70:
+        return False
+
+    letters = [c for c in text if c.isalpha()]
+    if not letters:
+        return False
+
+    upper_ratio = sum(1 for c in letters if c.isupper()) / len(letters)
+    max_size = max((s.get("size", body_font_size) for s in spans), default=body_font_size)
+    is_bold = any(bool(s.get("flags", 0) & 2 ** 4) for s in spans)
+
+    return upper_ratio > 0.8 or max_size >= body_font_size + 2 or (is_bold and len(text.split()) <= 6)
+
+
 # =============== PDF → WORD (PyMuPDF bilan: matn + formatlash + rasmlar) ===============
 def pdf_to_word(pdf_content: bytes, original_name: str) -> BytesIO:
     """PDF ni Word ga o'tkazish: matn formatlash (bold/o'lcham), jadval, va sahifadagi rasmlarni saqlab"""
@@ -191,7 +214,14 @@ def pdf_to_word(pdf_content: bytes, original_name: str) -> BytesIO:
         page = pdf[page_num]
 
         if total_pages > 1:
-            doc.add_heading(f'Sahifa {page_num + 1}', level=1)
+            # MUHIM: "Sahifa N" endi Heading emas — katta hujjatlarda (yuzlab sahifa) Heading sifatida
+            # qo'shilsa Word'ning Table of Contents'i butunlay sahifa raqamlaridan iborat bo'lib qoladi
+            # va haqiqiy mazmun (bo'lim sarlavhalari) ko'rinmay qoladi. Endi shunchaki kichik, sezilmas belgi.
+            marker = doc.add_paragraph()
+            marker.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            marker_run = marker.add_run(f"— {page_num + 1} —")
+            marker_run.font.size = Pt(7)
+            marker_run.font.color.rgb = RGBColor(190, 190, 190)
 
         # ---------- 0. Avval jadval hududlarini aniqlab olamiz (matn bilan dublikat bo'lmasligi uchun) ----------
         table_rects = []
@@ -278,6 +308,15 @@ def pdf_to_word(pdf_content: bytes, original_name: str) -> BytesIO:
         for y, x, kind, payload in items:
             if kind == "text_block":
                 block = payload
+                if looks_like_heading(block):
+                    text = "".join(
+                        s["text"] for line in block.get("lines", []) for s in line.get("spans", [])
+                    ).strip()
+                    text = re.sub(r'\s+', ' ', text)
+                    if text:
+                        doc.add_heading(text, level=2)
+                    continue
+
                 # Bir blokdagi barcha qatorlarni bitta paragrafga birlashtiramiz (bo'linib ketmasligi uchun)
                 para = doc.add_paragraph()
                 any_text = False
@@ -516,6 +555,26 @@ def epub_to_word(file_content: bytes, original_name: str) -> BytesIO:
     return output
 
 
+# =============== RASM(LAR) → PDF ===============
+def images_to_pdf(images_content: list) -> BytesIO:
+    """Bir nechta rasmni bitta PDF faylga birlashtirish"""
+    pil_images = []
+    for content in images_content:
+        img = Image.open(BytesIO(content))
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
+        pil_images.append(img)
+
+    output = BytesIO()
+    if not pil_images:
+        raise ValueError("Rasmlar topilmadi")
+
+    first, rest = pil_images[0], pil_images[1:]
+    first.save(output, format='PDF', save_all=True, append_images=rest)
+    output.seek(0)
+    return output
+
+
 # =============== RASM OCR (yaxshilangan) ===============
 def preprocess_image_for_ocr(image: Image.Image) -> Image.Image:
     """OCR aniqligini oshirish uchun rasmni qayta ishlash"""
@@ -558,6 +617,25 @@ def image_ocr(image_content: bytes) -> str:
         return ""
 
 
+def result_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([[InlineKeyboardButton("✏️ Nomini o'zgartirish", callback_data="rename")]])
+
+
+async def send_result_document(update: Update, context: ContextTypes.DEFAULT_TYPE,
+                                output: BytesIO, filename: str, caption: str):
+    """Konvertatsiya natijasini yuborish va keyinroq nomini o'zgartirish imkonini saqlash"""
+    data = output.getvalue()
+    context.user_data['last_output_bytes'] = data
+    context.user_data['last_output_name'] = filename
+
+    await update.message.reply_document(
+        document=BytesIO(data),
+        filename=filename,
+        caption=caption,
+        reply_markup=result_keyboard()
+    )
+
+
 # =============== BOT HANDLERLARI ===============
 
 # =============== TUGMALAR (INLINE KEYBOARD) ===============
@@ -580,7 +658,9 @@ HELP_TEXT = f"""📖 YORDAM
 📊 3. EXCEL — .xlsx, .xls, .csv yuboring
 🌐 4. HTML — .html fayl yuboring
 📚 5. EPUB — elektron kitob yuboring
-🖼 6. RASM — matnli rasm yuboring
+🖼 6. RASM — matnli rasm yuboring (OCR → Word)
+📄 7. RASM(LAR) → PDF — /rasm_pdf buyrug'ini yuboring, keyin rasmlarni jo'nating
+✏️ 8. Har bir natija ostida "Nomini o'zgartirish" tugmasi bor
 
 ⚠️ Fayl hajmi 50 MB dan oshmasin
 📞 Admin: {ADMIN_USERNAME}"""
@@ -656,6 +736,45 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 Fayl yoki matn yuboring — avtomatik Word'ga o'tkazaman.
 Yoki quyidagi tugmalardan foydalaning 👇"""
         await query.edit_message_text(message, reply_markup=main_menu_keyboard())
+
+    elif query.data == "rename":
+        if not context.user_data.get('last_output_bytes'):
+            await query.message.reply_text("⚠️ O'zgartiriladigan fayl topilmadi.")
+            return
+        context.user_data['awaiting_rename'] = True
+        await query.message.reply_text(
+            "✏️ Yangi fayl nomini yozing (kengaytmasiz, masalan: \"Mening hujjatim\"):"
+        )
+
+    elif query.data == "make_pdf":
+        images = context.user_data.get('pdf_images', [])
+        if not images:
+            await query.message.reply_text("⚠️ Hech qanday rasm topilmadi. Avval rasm yuboring.")
+            return
+        await query.edit_message_reply_markup(reply_markup=None)
+        progress = await query.message.reply_text(f"⚙️ {len(images)} ta rasmdan PDF yaratilmoqda...")
+        try:
+            output = await asyncio.to_thread(images_to_pdf, images)
+            await progress.delete()
+            await send_result_document(
+                update, context, output, "rasmlar.pdf",
+                caption=f"✅ Tayyor!\n🖼 {len(images)} ta rasmdan PDF yaratildi."
+            )
+            log_conversion(query.from_user.id, "images_to_pdf", "rasmlar.pdf", success=True)
+        except Exception as e:
+            await progress.delete()
+            logger.error(f"Rasm→PDF xatolik: {e}", exc_info=True)
+            log_conversion(query.from_user.id, "images_to_pdf", "rasmlar.pdf", success=False)
+            await query.message.reply_text(f"❌ Xatolik yuz berdi.\n📞 {ADMIN_USERNAME}")
+        finally:
+            context.user_data['collecting_pdf'] = False
+            context.user_data['pdf_images'] = []
+
+    elif query.data == "cancel_pdf":
+        context.user_data['collecting_pdf'] = False
+        context.user_data['pdf_images'] = []
+        await query.edit_message_reply_markup(reply_markup=None)
+        await query.message.reply_text("❌ Bekor qilindi. Rasmlar tozalandi.")
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -739,9 +858,8 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
             output = await asyncio.to_thread(text_to_word, text)
 
         await msg.delete()
-        await update.message.reply_document(
-            document=output,
-            filename=output_name,
+        await send_result_document(
+            update, context, output, output_name,
             caption=f"✅ Tayyor!\n📎 {file_name}\n📄 {output_name}"
         )
         log_conversion(user.id, file_ext, file_name, success=True)
@@ -761,21 +879,36 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     log_user(user.id, user.username or user.first_name)
+
+    photo = update.message.photo[-1]
+    file = await photo.get_file()
+    content = await file.download_as_bytearray()
+
+    # ---------- Rejim 1: Rasm(lar)ni PDF qilish to'plash rejimi (/rasm_pdf bilan boshlangan) ----------
+    if context.user_data.get('collecting_pdf'):
+        context.user_data.setdefault('pdf_images', []).append(bytes(content))
+        count = len(context.user_data['pdf_images'])
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton(f"✅ PDF qilish ({count} ta rasm)", callback_data="make_pdf")],
+            [InlineKeyboardButton("❌ Bekor qilish", callback_data="cancel_pdf")],
+        ])
+        await update.message.reply_text(
+            f"📥 {count}-rasm qabul qilindi.\nYana rasm yuboring yoki tugmani bosing 👇",
+            reply_markup=keyboard
+        )
+        return
+
+    # ---------- Rejim 2: Oddiy OCR → Word (standart) ----------
     msg = await update.message.reply_text("🖼 Rasm qayta ishlanmoqda (OCR)...")
 
     try:
-        photo = update.message.photo[-1]
-        file = await photo.get_file()
-        content = await file.download_as_bytearray()
-
         text = await asyncio.to_thread(image_ocr, bytes(content))
 
         if text and len(text.strip()) > 10:
             output = await asyncio.to_thread(text_to_word, text)
             await msg.delete()
-            await update.message.reply_document(
-                document=output,
-                filename="rasmdagi_matn.docx",
+            await send_result_document(
+                update, context, output, "rasmdagi_matn.docx",
                 caption=f"✅ Tayyor!\n📏 {len(text)} belgi"
             )
             log_conversion(user.id, "photo_ocr", "photo.jpg", success=True)
@@ -788,7 +921,8 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "• Rasmda matn yo'q\n"
                 "• Rasm sifatsiz\n"
                 "• Qo'l yozuvi\n\n"
-                "💡 Aniq, bosma matnli rasm yuboring."
+                "💡 Aniq, bosma matnli rasm yuboring.\n"
+                "📄 Yoki rasmni PDF qilish uchun /rasm_pdf buyrug'ini ishlating."
             )
     except Exception as e:
         await msg.delete()
@@ -797,10 +931,43 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Xatolik.\n📞 {ADMIN_USERNAME}")
 
 
+async def rasm_pdf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Bir nechta rasmni PDF'ga birlashtirish rejimini boshlash"""
+    context.user_data['collecting_pdf'] = True
+    context.user_data['pdf_images'] = []
+    await update.message.reply_text(
+        "📄 Rasm → PDF rejimi yoqildi.\n\n"
+        "Endi bir nechta rasm yuboring (tartib bo'yicha), so'ng \"✅ PDF qilish\" tugmasini bosing."
+    )
+
+
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     user = update.effective_user
     log_user(user.id, user.username or user.first_name)
+
+    # ---------- Agar foydalanuvchidan yangi fayl nomi kutilayotgan bo'lsa ----------
+    if context.user_data.get('awaiting_rename'):
+        context.user_data['awaiting_rename'] = False
+        data = context.user_data.get('last_output_bytes')
+        old_name = context.user_data.get('last_output_name', 'fayl.docx')
+        if not data:
+            await update.message.reply_text("⚠️ O'zgartiriladigan fayl topilmadi. Avval faylni konvertatsiya qiling.")
+            return
+
+        ext = old_name.rsplit('.', 1)[-1] if '.' in old_name else 'docx'
+        new_name = re.sub(r'[\\/:*?"<>|]', '_', text.strip())
+        if not new_name.lower().endswith('.' + ext):
+            new_name = f"{new_name}.{ext}"
+
+        context.user_data['last_output_name'] = new_name
+        await update.message.reply_document(
+            document=BytesIO(data),
+            filename=new_name,
+            caption=f"✅ Nomi o'zgartirildi:\n📄 {new_name}",
+            reply_markup=result_keyboard()
+        )
+        return
 
     if len(text) < 10:
         await update.message.reply_text("⚠️ Kamida 10 ta belgi kerak.")
@@ -811,9 +978,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         output = await asyncio.to_thread(text_to_word, text)
         await msg.delete()
-        await update.message.reply_document(
-            document=output,
-            filename="matn.docx",
+        await send_result_document(
+            update, context, output, "matn.docx",
             caption=f"✅ Tayyor!\n📏 {len(text)} belgi"
         )
         log_conversion(user.id, "text", "matn.txt", success=True)
@@ -841,6 +1007,7 @@ def main():
     app.add_handler(CommandHandler("admin", admin_command))
     app.add_handler(CommandHandler("stats", stats_command))
     app.add_handler(CommandHandler("about", about_command))
+    app.add_handler(CommandHandler("rasm_pdf", rasm_pdf_command))
 
     app.add_handler(CallbackQueryHandler(menu_callback))
 
