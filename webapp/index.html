@@ -626,11 +626,11 @@
                     actionBtn.disabled = false;
                     showToast('Conversion completed!', 'success');
 
-                    tg.sendData(JSON.stringify({
-                        action: 'convert',
-                        file: selectedFile.name,
-                        result: outputName,
-                        format: selectedFormat
+               tg.showPopup({
+    title: 'Conversion Complete',
+    message: 'File is ready! Check your Telegram bot for the result.',
+    buttons: [{type: 'ok'}]
+});     
                     }));
                 }, 400);
             } catch (err) {
