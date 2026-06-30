@@ -8,7 +8,7 @@ import sqlite3
 from datetime import datetime
 from io import BytesIO
 
-import fitz  # PyMuPDF — pip install pymupdf
+import fitz  # PyMuPDF
 from docx import Document
 from docx.shared import Pt, Cm, RGBColor, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -31,16 +31,15 @@ logger = logging.getLogger(__name__)
 # =============== KONFIGURATSIYA ===============
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 if not TOKEN:
-    raise RuntimeError(
-        "TELEGRAM_BOT_TOKEN environment variable topilmadi."
-    )
+    raise RuntimeError("TELEGRAM_BOT_TOKEN environment variable topilmadi.")
 
-ADMIN_ID = int(os.getenv("ADMIN_ID", "8805822154"))
-ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "@yoldoshev_3")
+ADMIN_ID = int(os.getenv("ADMIN_ID", "123456789"))
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "@admin")
 BOT_NAME = "📄 Professional File Converter"
 MAX_FILE_SIZE = 50 * 1024 * 1024
 OCR_LANGS = os.getenv("OCR_LANGS", "uzb+rus+eng")
 DB_PATH = os.getenv("DB_PATH", "bot_stats.db")
+PDF_TIMEOUT_SECONDS = int(os.getenv("PDF_TIMEOUT_SECONDS", "240"))
 
 # =============== SQLITE ===============
 def init_db():
@@ -162,8 +161,8 @@ def pdf_to_word(pdf_content: bytes, original_name: str, progress_cb=None) -> Byt
                 tabs = page.find_tables()
                 for table_obj in tabs.tables:
                     table_rects.append(fitz.Rect(table_obj.bbox))
-        except Exception as e:
-            logger.warning(f"Jadval xatolik: {e}")
+        except:
+            pass
         def inside_table(bbox):
             r = fitz.Rect(bbox)
             return any(r.intersects(tr) for tr in table_rects)
@@ -177,8 +176,8 @@ def pdf_to_word(pdf_content: bytes, original_name: str, progress_cb=None) -> Byt
                 if inside_table(bbox):
                     continue
                 items.append((bbox[1], bbox[0], "text_block", block))
-        except Exception as e:
-            logger.warning(f"Matn xatolik: {e}")
+        except:
+            pass
         try:
             for img_index, img in enumerate(page.get_images(full=True), 1):
                 xref = img[0]
@@ -356,6 +355,7 @@ def text_to_word(text: str) -> BytesIO:
 # =============== HTML → WORD ===============
 def html_to_word(file_content: bytes, original_name: str) -> BytesIO:
     from bs4 import BeautifulSoup
+    import base64
     doc = create_doc("🌐 HTML Hujjat", original_name)
     html = file_content.decode('utf-8', errors='ignore')
     soup = BeautifulSoup(html, 'html.parser')
@@ -371,7 +371,6 @@ def html_to_word(file_content: bytes, original_name: str) -> BytesIO:
             doc.add_heading(cleaned, level=level)
         else:
             doc.add_paragraph(cleaned)
-    import base64
     for img_tag in soup.find_all('img'):
         src = img_tag.get('src', '')
         if src.startswith('data:image'):
@@ -421,10 +420,8 @@ def epub_to_word(file_content: bytes, original_name: str) -> BytesIO:
 
 # =============== RASM(LAR) → PDF ===============
 def images_to_pdf(images_content: list) -> BytesIO:
-    """Bir nechta rasmni bitta PDF faylga birlashtirish"""
     if not images_content:
         raise ValueError("Rasmlar topilmadi")
-    
     pil_images = []
     for content in images_content:
         img = Image.open(BytesIO(content))
@@ -435,7 +432,6 @@ def images_to_pdf(images_content: list) -> BytesIO:
         elif img.mode != 'RGB':
             img = img.convert('RGB')
         pil_images.append(img)
-    
     output = BytesIO()
     if len(pil_images) == 1:
         pil_images[0].save(output, format='PDF')
@@ -472,104 +468,247 @@ def image_ocr(image_content: bytes) -> str:
     except:
         return ""
 
+# =============== TUGMALAR ===============
 def result_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[InlineKeyboardButton("✏️ Nomini o'zgartirish", callback_data="rename")]])
 
-async def send_result_document(update: Update, context: ContextTypes.DEFAULT_TYPE, output: BytesIO, filename: str, caption: str):
-    data = output.getvalue()
-    context.user_data['last_output_bytes'] = data
-    context.user_data['last_output_name'] = filename
-    await update.message.reply_document(document=BytesIO(data), filename=filename, caption=caption, reply_markup=result_keyboard())
-
-# =============== TUGMALAR ===============
 def main_menu_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("📖 Yordam", callback_data="help"), InlineKeyboardButton("📋 Formatlar", callback_data="formats")],
-        [InlineKeyboardButton("ℹ️ Bot haqida", callback_data="about"), InlineKeyboardButton("📩 Murojaat", callback_data="contact_admin")],
+        [InlineKeyboardButton("📖 Yordam", callback_data="help"),
+         InlineKeyboardButton("📋 Formatlar", callback_data="formats")],
+        [InlineKeyboardButton("ℹ️ Bot haqida", callback_data="about"),
+         InlineKeyboardButton("📩 Murojaat", callback_data="contact_admin")],
+        [InlineKeyboardButton("📸 Rasm → PDF", callback_data="rasm_pdf_info"),
+         InlineKeyboardButton("📊 Statistika", callback_data="public_stats")],
     ])
 
 def back_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Orqaga", callback_data="menu")]])
 
-HELP_TEXT = f"""📖 YORDAM
+# =============== MATNLAR ===============
+HELP_TEXT = f"""
+📖 <b>YORDAM MARKAZI</b>
 
-📝 1. MATN — matn yozing, Word faylga o'tkaziladi
-📄 2. PDF — PDF fayl yuboring (matn, rasm va jadvallar bilan)
-📊 3. EXCEL — .xlsx, .xls, .csv yuboring
-🌐 4. HTML — .html fayl yuboring
-📚 5. EPUB — elektron kitob yuboring
-🖼 6. RASM — matnli rasm yuboring (OCR → Word)
-📄 7. RASM(LAR) → PDF — /rasm_pdf buyrug'ini yuboring, keyin rasmlarni jo'nating
-✏️ 8. Har bir natija ostida "Nomini o'zgartirish" tugmasi bor
-📩 9. Admin bilan bog'lanish — "📩 Murojaat" tugmasi
+━━━━━━━━━━━━━━━━━━━━━
 
-⚠️ Fayl hajmi 50 MB dan oshmasin
-📞 Admin: {ADMIN_USERNAME}"""
+📝 <b>1. MATN</b>
+Oddiy matn yozing — Word (.docx) faylga o'tkaziladi.
 
-FORMATS_TEXT = """📋 FORMATLAR
+📄 <b>2. PDF</b>
+PDF fayl yuboring. Matn, jadvallar va rasmlar saqlanadi.
+• Oddiy PDF: matn + jadvallar
+• Skanerlangan PDF: OCR
+• Ko'p ustunli: to'g'ri tartibda
 
-📄 .pdf — PDF hujjatlar
-📊 .xlsx, .xls, .csv — Excel
-🌐 .html, .htm — Web sahifalar
-📚 .epub — Elektron kitoblar
-📝 .txt, .md, .json, .xml — Matn
-🖼 .jpg, .png, .bmp — Rasmlar
+📊 <b>3. EXCEL</b>
+.xlsx, .xls, .csv yuboring.
 
-✅ Barchasi → .docx"""
+🌐 <b>4. HTML</b>
+.html fayllar, sarlavhalar saqlanadi.
 
-ABOUT_TEXT = f"""ℹ️ BOT HAQIDA
+📚 <b>5. EPUB</b>
+Elektron kitoblar, bo'limlar alohida.
 
-🏷 {BOT_NAME}
-💼 Fayllarni Microsoft Word (.docx) formatiga o'tkazish uchun professional bot.
-👨‍💼 {ADMIN_USERNAME}
-📞 {ADMIN_USERNAME}"""
+🖼 <b>6. RASM OCR</b>
+Matnli rasm — OCR → Word
+
+📸 <b>7. RASM → PDF</b>
+/rasm_pdf → rasmlar → PDF
+
+✏️ <b>8. NOM O'ZGARTIRISH</b>
+Natija ostidagi tugma orqali.
+
+━━━━━━━━━━━━━━━━━━━━━
+
+⚠️ Fayl: 50 MB gacha | ⏱ PDF: 4 daqiqa
+📞 Admin: {ADMIN_USERNAME}
+"""
+
+FORMATS_TEXT = """
+📋 <b>QO'LLAB-QUVVATLANADIGAN FORMATLAR</b>
+
+━━━━━━━━━━━━━━━━━━━━━
+
+📄 <b>Hujjatlar:</b>
+• .pdf — PDF (matn + rasm + jadval)
+• .xlsx, .xls, .csv — Excel
+• .html, .htm — Web sahifalar
+
+📚 <b>Kitoblar:</b>
+• .epub
+
+📝 <b>Matn:</b>
+• Oddiy matn
+• .txt, .md, .json, .xml
+
+🖼 <b>Rasmlar:</b>
+• .jpg, .png, .bmp (OCR)
+• /rasm_pdf (Rasm → PDF)
+
+━━━━━━━━━━━━━━━━━━━━━
+
+✅ <b>Barchasi → .docx</b>
+"""
+
+ABOUT_TEXT = f"""
+ℹ️ <b>BOT HAQIDA</b>
+
+━━━━━━━━━━━━━━━━━━━━━
+
+🏷 <b>{BOT_NAME}</b>
+📌 <b>Versiya 3.0 Pro</b>
+
+💼 Professional fayl konvertatsiya boti
+
+⭐ <b>Afzalliklari:</b>
+• PDF ichidagi rasmlar saqlanadi
+• Shrift formatlash (bold, italic)
+• Ko'p ustunli PDF
+• Sarlavhalarni aniqlash
+• Real-time progress-bar
+
+━━━━━━━━━━━━━━━━━━━━━
+
+👨‍💼 <b>Admin:</b> {ADMIN_USERNAME}
+📞 <b>Aloqa:</b> {ADMIN_USERNAME}
+"""
+
+# =============== YUBORISH FUNKSIYASI ===============
+async def send_result_document(update: Update, context: ContextTypes.DEFAULT_TYPE, output: BytesIO, filename: str, caption: str):
+    data = output.getvalue()
+    context.user_data['last_output_bytes'] = data
+    context.user_data['last_output_name'] = filename
+    await update.message.reply_document(
+        document=BytesIO(data),
+        filename=filename,
+        caption=caption,
+        parse_mode='HTML',
+        reply_markup=result_keyboard()
+    )
+
+def make_progress_bar(current: int, total: int, width: int = 15) -> str:
+    if total <= 0:
+        return ""
+    ratio = current / total
+    filled = int(ratio * width)
+    bar = "🟦" * filled + "⬜" * (width - filled)
+    percent = int(ratio * 100)
+    return f"{bar}\n📄 <b>{current}/{total}</b> sahifa (<b>{percent}%</b>)"
 
 # =============== HANDLERLAR ===============
+
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     log_user(user.id, user.username or user.first_name)
-    message = f"""✨ Assalomu alaykum, {user.first_name}!
+    
+    message = f"""
+✨ <b>Assalomu alaykum, {user.first_name}!</b>
 
-💼 {BOT_NAME} ga xush kelibsiz!
+<b>🏷 {BOT_NAME}</b>
 
-📌 Quyidagi formatlarni Word (.docx) ga o'tkazadi:
-📄 PDF | 📊 Excel | 🌐 HTML | 📚 EPUB | 📝 Matn | 🖼 Rasmlar (OCR)
+━━━━━━━━━━━━━━━━━━━━━
 
-⚙️ Fayl yoki matn yuboring — avtomatik Word'ga o'tkazaman.
-📌 Maksimal hajm: 50 MB | Bepul ✅
+📌 <b>Word (.docx) ga o'tkazadi:</b>
 
-Quyidagi tugmalardan foydalaning 👇"""
-    await update.message.reply_text(message, reply_markup=main_menu_keyboard())
+📄 PDF <i>(matn + rasm + jadvallar)</i>
+📊 Excel jadvallari
+🌐 HTML sahifalar
+📚 EPUB kitoblar
+📝 Matn fayllari
+🖼 Rasmlar <i>(OCR)</i>
+📸 Rasmlarni PDF qilish
+
+━━━━━━━━━━━━━━━━━━━━━
+
+⚡ <b>Foydalanish:</b>
+1️⃣ Fayl yoki matn yuboring
+2️⃣ Avtomatik konvertatsiya
+3️⃣ Tayyor faylni yuklab oling
+
+📌 Maksimal hajm: <b>50 MB</b>
+📌 <b>24/7</b> ishlaydi
+📌 <b>Bepul</b> ✅
+
+👨‍💼 Admin: {ADMIN_USERNAME}
+
+Quyidagi menyudan foydalaning 👇
+"""
+    await update.message.reply_text(message, parse_mode='HTML', reply_markup=main_menu_keyboard())
+
 
 async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     
     if query.data == "help":
-        await query.edit_message_text(HELP_TEXT, reply_markup=back_keyboard())
+        await query.edit_message_text(HELP_TEXT, parse_mode='HTML', reply_markup=back_keyboard())
+    
     elif query.data == "formats":
-        await query.edit_message_text(FORMATS_TEXT, reply_markup=back_keyboard())
+        await query.edit_message_text(FORMATS_TEXT, parse_mode='HTML', reply_markup=back_keyboard())
+    
     elif query.data == "about":
-        await query.edit_message_text(ABOUT_TEXT, reply_markup=back_keyboard())
+        await query.edit_message_text(ABOUT_TEXT, parse_mode='HTML', reply_markup=back_keyboard())
+    
     elif query.data == "menu":
         user = query.from_user
-        message = f"""✨ {user.first_name}, asosiy menyu
+        message = f"""✨ <b>{user.first_name}</b>, asosiy menyu
 
-💼 {BOT_NAME}
+💼 <b>{BOT_NAME}</b>
+
 Fayl yoki matn yuboring — avtomatik Word'ga o'tkazaman.
 Yoki quyidagi tugmalardan foydalaning 👇"""
-        await query.edit_message_text(message, reply_markup=main_menu_keyboard())
+        await query.edit_message_text(message, parse_mode='HTML', reply_markup=main_menu_keyboard())
+    
+    elif query.data == "rasm_pdf_info":
+        message = """
+📸 <b>RASM → PDF</b>
+
+━━━━━━━━━━━━━━━━━━━━━
+
+Bir nechta rasmni bitta PDF qilish:
+
+1️⃣ /rasm_pdf buyrug'ini yuboring
+2️⃣ Rasmlarni birin-ketin jo'nating
+3️⃣ "✅ PDF QILISH" tugmasini bosing
+
+📌 Rasmlar A4 formatda, markazda joylashadi.
+"""
+        await query.edit_message_text(message, parse_mode='HTML', reply_markup=back_keyboard())
+    
+    elif query.data == "public_stats":
+        stats = get_stats()
+        message = f"""
+📊 <b>BOT STATISTIKASI</b>
+
+━━━━━━━━━━━━━━━━━━━━━
+
+👥 Foydalanuvchilar: <b>{stats['total_users']}</b>
+🔄 Konvertatsiyalar: <b>{stats['total_conversions']}</b>
+✅ Muvaffaqiyatli: <b>{stats['successful']}</b>
+
+━━━━━━━━━━━━━━━━━━━━━
+
+🌟 24/7 ishlaydi
+📌 Bepul xizmat
+⚡ Tez va sifatli
+"""
+        await query.edit_message_text(message, parse_mode='HTML', reply_markup=back_keyboard())
     
     elif query.data == "contact_admin":
         context.user_data['awaiting_contact_message'] = True
-        await query.message.reply_text("📩 Xabaringizni yozing — adminga yuboriladi.\nBekor qilish uchun /cancel")
+        await query.message.reply_text(
+            "📩 <b>Murojaat yuborish</b>\n\n"
+            "Xabaringizni yozing — to'g'ridan-to'g'ri adminga yuboriladi.\n"
+            "❌ Bekor qilish uchun /cancel",
+            parse_mode='HTML'
+        )
     
     elif query.data == "rename":
         if not context.user_data.get('last_output_bytes'):
             await query.message.reply_text("⚠️ O'zgartiriladigan fayl topilmadi.")
             return
         context.user_data['awaiting_rename'] = True
-        await query.message.reply_text("✏️ Yangi fayl nomini yozing (kengaytmasiz):")
+        await query.message.reply_text("✏️ <b>Yangi fayl nomini yozing</b> (kengaytmasiz):", parse_mode='HTML')
     
     elif query.data == "make_pdf":
         images = context.user_data.get('pdf_images', [])
@@ -578,7 +717,7 @@ Yoki quyidagi tugmalardan foydalaning 👇"""
             return
         
         await query.edit_message_reply_markup(reply_markup=None)
-        progress = await query.message.reply_text(f"⚙️ {len(images)} ta rasmdan PDF yaratilmoqda...")
+        progress = await query.message.reply_text(f"⚙️ <b>{len(images)}</b> ta rasmdan PDF yaratilmoqda...", parse_mode='HTML')
         
         try:
             output = images_to_pdf(images)
@@ -591,7 +730,8 @@ Yoki quyidagi tugmalardan foydalaning 👇"""
             await query.message.reply_document(
                 document=BytesIO(data),
                 filename="rasmlar.pdf",
-                caption=f"✅ Tayyor!\n🖼 {len(images)} ta rasmdan PDF yaratildi.",
+                caption=f"✅ <b>Tayyor!</b>\n🖼 <b>{len(images)}</b> ta rasmdan PDF yaratildi.",
+                parse_mode='HTML',
                 reply_markup=result_keyboard()
             )
             log_conversion(query.from_user.id, "images_to_pdf", "rasmlar.pdf", success=True)
@@ -609,46 +749,60 @@ Yoki quyidagi tugmalardan foydalaning 👇"""
         await query.edit_message_reply_markup(reply_markup=None)
         await query.message.reply_text("❌ Bekor qilindi.")
 
+
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(HELP_TEXT, reply_markup=back_keyboard())
+    await update.message.reply_text(HELP_TEXT, parse_mode='HTML', reply_markup=back_keyboard())
 
 async def formats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(FORMATS_TEXT, reply_markup=back_keyboard())
+    await update.message.reply_text(FORMATS_TEXT, parse_mode='HTML', reply_markup=back_keyboard())
 
 async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
-        await update.message.reply_text("⛔ Faqat admin uchun.")
+        await update.message.reply_text("⛔ <b>Ruxsat yo'q!</b>\nFaqat admin uchun.", parse_mode='HTML')
         return
-    await update.message.reply_text(f"👑 ADMIN PANEL\n\n🟢 Holat: Aktiv\n👨‍💼 {ADMIN_USERNAME}")
+    
+    stats = get_stats()
+    
+    message = f"""
+👑 <b>ADMIN PANEL</b>
+
+━━━━━━━━━━━━━━━━━━━━━
+
+🟢 <b>Holat:</b> Aktiv
+📌 <b>Versiya:</b> 3.0 Pro
+
+━━━━━━━━━━━━━━━━━━━━━
+
+📊 <b>STATISTIKA:</b>
+
+👥 Foydalanuvchilar: <b>{stats['total_users']}</b>
+🔄 Jami: <b>{stats['total_conversions']}</b>
+✅ Muvaffaqiyatli: <b>{stats['successful']}</b>
+❌ Xatolik: <b>{stats['total_conversions'] - stats['successful']}</b>
+
+━━━━━━━━━━━━━━━━━━━━━
+
+📈 <b>ENG KO'P:</b>
+"""
+    
+    emoji_map = {"pdf": "📄", "xlsx": "📊", "csv": "📊", "xls": "📊", "text": "📝", "photo_ocr": "🖼", "html": "🌐", "epub": "📚", "images_to_pdf": "📸"}
+    for ftype, count in stats.get("top_types", [])[:5]:
+        emoji = emoji_map.get(ftype, "📎")
+        message += f"{emoji} {ftype}: <b>{count}</b>\n"
+    
+    message += f"\n👨‍💼 Admin: {ADMIN_USERNAME}"
+    
+    await update.message.reply_text(message, parse_mode='HTML')
 
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
-        await update.message.reply_text("⛔ Faqat admin uchun.")
+        await update.message.reply_text("⛔ <b>Ruxsat yo'q!</b>", parse_mode='HTML')
         return
-    stats = get_stats()
-    top_lines = "\n".join(f"  • {ftype}: {count}" for ftype, count in stats["top_types"]) or "  (hali yo'q)"
-    message = f"""📊 STATISTIKA
-
-👥 Foydalanuvchilar: {stats['total_users']}
-🔄 Jami konvertatsiyalar: {stats['total_conversions']}
-✅ Muvaffaqiyatli: {stats['successful']}
-🏆 Eng ko'p: 
-{top_lines}"""
-    await update.message.reply_text(message)
+    await admin_command(update, context)
 
 async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(ABOUT_TEXT, reply_markup=back_keyboard())
+    await update.message.reply_text(ABOUT_TEXT, parse_mode='HTML', reply_markup=back_keyboard())
 
-def make_progress_bar(current: int, total: int, width: int = 12) -> str:
-    if total <= 0:
-        return ""
-    ratio = current / total
-    filled = int(ratio * width)
-    bar = "■" * filled + "□" * (width - filled)
-    percent = int(ratio * 100)
-    return f"[{bar}] {current}/{total} sahifa ({percent}%)"
-
-PDF_TIMEOUT_SECONDS = int(os.getenv("PDF_TIMEOUT_SECONDS", "240"))
 
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     document = update.message.document
@@ -667,7 +821,12 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ .{file_ext} qo'llab-quvvatlanmaydi.\n📋 /formats")
         return
     
-    msg = await update.message.reply_text(f"⏳ {file_name} yuklab olinmoqda...")
+    file_emoji = {"pdf": "📄", "xlsx": "📊", "xls": "📊", "csv": "📊", "html": "🌐", "htm": "🌐", "epub": "📚"}.get(file_ext, "📎")
+    
+    msg = await update.message.reply_text(
+        f"{file_emoji} <b>{file_name}</b> yuklab olinmoqda...\n📦 {document.file_size // 1024} KB",
+        parse_mode='HTML'
+    )
     
     try:
         file = await document.get_file()
@@ -685,16 +844,19 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 last_edit["time"] = now
                 last_edit["text"] = text
                 try:
-                    await msg.edit_text(text)
+                    await msg.edit_text(text, parse_mode='HTML')
                 except:
                     pass
             
             def sync_progress(current: int, total: int):
                 bar = make_progress_bar(current, total)
-                text = f"⚙️ {file_name} konvertatsiya qilinmoqda...\n{bar}"
+                text = f"⚙️ <b>{file_name}</b> konvertatsiya qilinmoqda...\n{bar}"
                 asyncio.run_coroutine_threadsafe(update_progress_msg(text), loop)
             
-            await msg.edit_text(f"⚙️ {file_name} konvertatsiya qilinmoqda...\n{make_progress_bar(0, 1)}")
+            await msg.edit_text(
+                f"⚙️ <b>{file_name}</b> konvertatsiya qilinmoqda...\n{make_progress_bar(0, 1)}",
+                parse_mode='HTML'
+            )
             
             try:
                 output = await asyncio.wait_for(
@@ -703,30 +865,43 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             except asyncio.TimeoutError:
                 await msg.delete()
-                await update.message.reply_text(f"⏱ {file_name} konvertatsiyasi juda ko'p vaqt oldi va to'xtatildi.\n💡 Faylni kichikroq qismlarga bo'lib yuboring.")
+                await update.message.reply_text(
+                    f"⏱ <b>{file_name}</b> konvertatsiyasi {PDF_TIMEOUT_SECONDS} soniyadan ko'p vaqt oldi.\n"
+                    f"💡 Faylni kichikroq qismlarga bo'lib yuboring.",
+                    parse_mode='HTML'
+                )
                 return
+        
         elif file_ext in ['xlsx', 'xls', 'csv']:
-            await msg.edit_text(f"⚙️ {file_name} konvertatsiya qilinmoqda...")
+            await msg.edit_text(f"⚙️ <b>{file_name}</b> konvertatsiya qilinmoqda...", parse_mode='HTML')
             output = await asyncio.to_thread(excel_to_word, bytes(content), file_ext, file_name)
+        
         elif file_ext in ['html', 'htm']:
-            await msg.edit_text(f"⚙️ {file_name} konvertatsiya qilinmoqda...")
+            await msg.edit_text(f"⚙️ <b>{file_name}</b> konvertatsiya qilinmoqda...", parse_mode='HTML')
             output = await asyncio.to_thread(html_to_word, bytes(content), file_name)
+        
         elif file_ext == 'epub':
-            await msg.edit_text(f"⚙️ {file_name} konvertatsiya qilinmoqda...")
+            await msg.edit_text(f"⚙️ <b>{file_name}</b> konvertatsiya qilinmoqda...", parse_mode='HTML')
             output = await asyncio.to_thread(epub_to_word, bytes(content), file_name)
+        
         else:
-            await msg.edit_text(f"⚙️ {file_name} konvertatsiya qilinmoqda...")
+            await msg.edit_text(f"⚙️ <b>{file_name}</b> konvertatsiya qilinmoqda...", parse_mode='HTML')
             text = content.decode('utf-8', errors='ignore')
             output = await asyncio.to_thread(text_to_word, text)
         
         await msg.delete()
-        await send_result_document(update, context, output, output_name, f"✅ Tayyor!\n📎 {file_name}\n📄 {output_name}")
+        await send_result_document(
+            update, context, output, output_name,
+            f"✅ <b>Tayyor!</b>\n\n{file_emoji} <b>{file_name}</b>\n⬇️ <b>{output_name}</b>\n📅 {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+        )
         log_conversion(user.id, file_ext, file_name, success=True)
         
     except Exception as e:
         await msg.delete()
         logger.error(f"Xatolik ({file_name}): {e}")
-        await update.message.reply_text(f"❌ Xatolik yuz berdi.\n📞 {ADMIN_USERNAME}")
+        await update.message.reply_text(f"❌ Xatolik yuz berdi.\n📞 Admin: {ADMIN_USERNAME}")
+        log_conversion(user.id, file_ext, file_name, success=False)
+
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -738,33 +913,66 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.user_data.get('collecting_pdf'):
         context.user_data.setdefault('pdf_images', []).append(bytes(content))
         count = len(context.user_data['pdf_images'])
+        
+        message = f"📥 <b>{count}-rasm qabul qilindi!</b>\n\n📸 Jami: <b>{count}</b> ta rasm\nYana rasm yuboring yoki tugmani bosing 👇"
+        
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"✅ PDF qilish ({count} ta rasm)", callback_data="make_pdf")],
+            [InlineKeyboardButton(f"✅ PDF QILISH ({count} ta)", callback_data="make_pdf")],
             [InlineKeyboardButton("❌ Bekor qilish", callback_data="cancel_pdf")],
         ])
-        await update.message.reply_text(f"📥 {count}-rasm qabul qilindi.\nYana rasm yuboring yoki tugmani bosing 👇", reply_markup=keyboard)
+        
+        await update.message.reply_text(message, parse_mode='HTML', reply_markup=keyboard)
         return
     
-    msg = await update.message.reply_text("🖼 Rasm qayta ishlanmoqda (OCR)...")
+    msg = await update.message.reply_text("🖼 <b>Rasm qayta ishlanmoqda</b> (OCR)...", parse_mode='HTML')
+    
     try:
         text = await asyncio.to_thread(image_ocr, bytes(content))
+        
         if text and len(text.strip()) > 10:
             output = await asyncio.to_thread(text_to_word, text)
             await msg.delete()
-            await send_result_document(update, context, output, "rasmdagi_matn.docx", f"✅ Tayyor!\n📏 {len(text)} belgi")
+            await send_result_document(
+                update, context, output, "rasmdagi_matn.docx",
+                f"✅ <b>Tayyor!</b>\n📏 <b>{len(text)}</b> belgi"
+            )
             log_conversion(user.id, "photo_ocr", "photo.jpg", success=True)
         else:
             await msg.delete()
-            await update.message.reply_text("⚠️ Rasmdan matn topilmadi.\n📄 Rasmni PDF qilish uchun /rasm_pdf")
+            await update.message.reply_text(
+                "⚠️ <b>Rasmdan matn topilmadi.</b>\n\n"
+                "📌 Sabablar:\n• Rasmda matn yo'q\n• Rasm sifatsiz\n• Qo'l yozuvi\n\n"
+                "💡 Aniq, bosma matnli rasm yuboring.\n📄 Yoki /rasm_pdf orqali PDF qiling.",
+                parse_mode='HTML'
+            )
+            log_conversion(user.id, "photo_ocr", "photo.jpg", success=False)
     except Exception as e:
         await msg.delete()
         logger.error(f"Rasm xatolik: {e}")
         await update.message.reply_text(f"❌ Xatolik.\n📞 {ADMIN_USERNAME}")
 
+
 async def rasm_pdf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['collecting_pdf'] = True
     context.user_data['pdf_images'] = []
-    await update.message.reply_text("📄 Rasm → PDF rejimi yoqildi.\n\nEndi bir nechta rasm yuboring, so'ng \"✅ PDF qilish\" tugmasini bosing.")
+    
+    message = """
+📸 <b>RASM → PDF REJIMI</b>
+
+━━━━━━━━━━━━━━━━━━━━━
+
+📤 Endi rasmlarni birin-ketin yuboring.
+Barcha rasmlar <b>bitta PDF</b> faylga birlashtiriladi.
+
+📌 <b>Eslatma:</b>
+• Rasmlar yuborgan tartibda joylashadi
+• Har bir rasm alohida sahifada
+• A4 formatda, markazda
+
+❌ Bekor qilish uchun /cancel
+"""
+    await update.message.reply_text(message, parse_mode='HTML')
+
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
@@ -775,10 +983,18 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['awaiting_contact_message'] = False
         username_display = f"@{user.username}" if user.username else user.first_name
         try:
-            await context.bot.send_message(ADMIN_ID, f"📩 YANGI MUROJAAT\n\n👤 {username_display}\n🆔 ID: {user.id}\n\n💬 {text}\n\n↩️ Javob: /reply {user.id} <matn>")
-            await update.message.reply_text("✅ Murojaatingiz adminga yuborildi.", reply_markup=back_keyboard())
+            await context.bot.send_message(
+                ADMIN_ID,
+                f"📩 <b>YANGI MUROJAAT</b>\n\n"
+                f"👤 {username_display}\n"
+                f"🆔 ID: {user.id}\n\n"
+                f"💬 {text}\n\n"
+                f"↩️ Javob: /reply {user.id} <matn>",
+                parse_mode='HTML'
+            )
+            await update.message.reply_text("✅ <b>Murojaatingiz adminga yuborildi.</b>", parse_mode='HTML', reply_markup=back_keyboard())
         except:
-            await update.message.reply_text(f"❌ Yuborib bo'lmadi. Admin: {ADMIN_USERNAME}")
+            await update.message.reply_text(f"❌ Yuborib bo'lmadi.\n📞 Admin: {ADMIN_USERNAME}")
         return
     
     if context.user_data.get('awaiting_rename'):
@@ -793,52 +1009,69 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not new_name.lower().endswith('.' + ext):
             new_name = f"{new_name}.{ext}"
         context.user_data['last_output_name'] = new_name
-        await update.message.reply_document(document=BytesIO(data), filename=new_name, caption=f"✅ Nomi o'zgartirildi:\n📄 {new_name}", reply_markup=result_keyboard())
+        await update.message.reply_document(
+            document=BytesIO(data),
+            filename=new_name,
+            caption=f"✅ <b>Nomi o'zgartirildi:</b>\n📄 {new_name}",
+            parse_mode='HTML',
+            reply_markup=result_keyboard()
+        )
         return
     
     if len(text) < 10:
         await update.message.reply_text("⚠️ Kamida 10 ta belgi kerak.")
         return
     
-    msg = await update.message.reply_text("⏳ Matn qayta ishlanmoqda...")
+    msg = await update.message.reply_text("⏳ <b>Matn qayta ishlanmoqda...</b>", parse_mode='HTML')
+    
     try:
         output = await asyncio.to_thread(text_to_word, text)
         await msg.delete()
-        await send_result_document(update, context, output, "matn.docx", f"✅ Tayyor!\n📏 {len(text)} belgi")
+        await send_result_document(
+            update, context, output, "matn.docx",
+            f"✅ <b>Tayyor!</b>\n📏 <b>{len(text)}</b> belgi"
+        )
         log_conversion(user.id, "text", "matn.txt", success=True)
     except Exception as e:
         await msg.delete()
         logger.error(f"Matn xatolik: {e}")
         await update.message.reply_text("❌ Xatolik yuz berdi.")
 
+
 async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['awaiting_contact_message'] = False
     context.user_data['awaiting_rename'] = False
     context.user_data['collecting_pdf'] = False
-    await update.message.reply_text("❌ Bekor qilindi.", reply_markup=main_menu_keyboard())
+    await update.message.reply_text("❌ <b>Bekor qilindi.</b>", parse_mode='HTML', reply_markup=main_menu_keyboard())
+
 
 async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("⛔ Faqat admin uchun.")
         return
+    
     args = context.args
     if len(args) < 2:
         await update.message.reply_text("/reply <user_id> <matn>")
         return
+    
     try:
         target_id = int(args[0])
     except ValueError:
         await update.message.reply_text("⚠️ user_id raqam bo'lishi kerak.")
         return
+    
     reply_text = " ".join(args[1:])
     try:
-        await context.bot.send_message(target_id, f"📩 ADMIN JAVOBI:\n\n{reply_text}")
+        await context.bot.send_message(target_id, f"📩 <b>ADMIN JAVOBI:</b>\n\n{reply_text}", parse_mode='HTML')
         await update.message.reply_text("✅ Javob yuborildi.")
     except Exception as e:
         await update.message.reply_text(f"❌ Yuborib bo'lmadi: {str(e)[:150]}")
 
+
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
     logger.error(f"Xatolik: {context.error}")
+
 
 # =============== MAIN ===============
 def main():
