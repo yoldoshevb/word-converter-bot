@@ -585,19 +585,32 @@ def epub_to_word(file_content: bytes, original_name: str) -> BytesIO:
 # =============== RASM(LAR) → PDF ===============
 def images_to_pdf(images_content: list) -> BytesIO:
     """Bir nechta rasmni bitta PDF faylga birlashtirish"""
+    from PIL import Image
+    
+    if not images_content:
+        raise ValueError("Rasmlar topilmadi")
+    
     pil_images = []
     for content in images_content:
         img = Image.open(BytesIO(content))
         if img.mode != 'RGB':
             img = img.convert('RGB')
         pil_images.append(img)
-
+    
     output = BytesIO()
-    if not pil_images:
-        raise ValueError("Rasmlar topilmadi")
-
-    first, rest = pil_images[0], pil_images[1:]
-    first.save(output, format='PDF', save_all=True, append_images=rest)
+    
+    if len(pil_images) == 1:
+        # Bitta rasm bo'lsa
+        pil_images[0].save(output, format='PDF')
+    else:
+        # Ko'p rasm bo'lsa
+        pil_images[0].save(
+            output,
+            format='PDF',
+            save_all=True,
+            append_images=pil_images[1:]
+        )
+    
     output.seek(0)
     return output
 
