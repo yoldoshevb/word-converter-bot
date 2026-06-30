@@ -34,7 +34,7 @@ if not TOKEN:
     raise RuntimeError("TELEGRAM_BOT_TOKEN environment variable topilmadi.")
 
 ADMIN_ID = int(os.getenv("ADMIN_ID", "123456789"))
-ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "@admin")
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "@yoldoshev_3")
 BOT_NAME = "📄 Professional File Converter"
 MAX_FILE_SIZE = 50 * 1024 * 1024
 OCR_LANGS = os.getenv("OCR_LANGS", "uzb+rus+eng")
