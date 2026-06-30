@@ -19,77 +19,50 @@ logger = logging.getLogger(__name__)
 
 # =============== KONFIGURATSIYA ===============
 TOKEN = "8805822154:AAHdDCps2cumRbpQWm3iw5bEzg0vTjmMOdQ"
-ADMIN_ID = 8805822154  # ⚠️ BU TOKEN EMAS, BU SIZNING TELEGRAM ID'INGIZ BO'LISHI KERAK!
+ADMIN_ID = 8805822154
 ADMIN_USERNAME = "@yoldoshev_3"
 BOT_NAME = "📄 Professional File Converter"
-BOT_VERSION = "3.0.0"
+BOT_VERSION = "3.0"
 MAX_FILE_SIZE = 50 * 1024 * 1024
 
 # =============== STATISTIKA ===============
 _stats = {
     "total_conversions": 0,
-    "pdf_count": 0,
-    "excel_count": 0,
-    "text_count": 0,
-    "image_count": 0,
-    "html_count": 0,
-    "epub_count": 0,
-    "other_count": 0,
     "users": set(),
     "start_date": datetime.now()
 }
 
-def update_stats(file_type: str, user_id: int):
-    """Statistikani yangilash"""
-    _stats["total_conversions"] += 1
-    _stats["users"].add(user_id)
-    
-    stats_map = {
-        "pdf": "pdf_count", "xlsx": "excel_count", "xls": "excel_count",
-        "csv": "excel_count", "html": "html_count", "htm": "html_count",
-        "epub": "epub_count", "image": "image_count", "text": "text_count"
-    }
-    
-    key = stats_map.get(file_type, "other_count")
-    _stats[key] += 1
-
-# =============== PROFESSIONAL WORD HUJJAT ===============
+# =============== WORD HUJJAT YARATISH ===============
 def create_professional_document(title: str, content_type: str, original_name: str = "") -> Document:
-    """Professional formatdagi Word hujjat yaratish"""
     doc = Document()
     
-    # Sahifa sozlamalari
     section = doc.sections[0]
     section.top_margin = Cm(2.5)
     section.bottom_margin = Cm(2.5)
     section.left_margin = Cm(3)
     section.right_margin = Cm(3)
     
-    # Header
     header = section.header
     header_para = header.paragraphs[0]
-    header_para.text = f"📄 {BOT_NAME} | Rasmiy hujjat"
+    header_para.text = f"📄 {BOT_NAME}"
     header_para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     for run in header_para.runs:
         run.font.size = Pt(8)
     
-    # Footer
     footer = section.footer
     footer_para = footer.paragraphs[0]
-    footer_para.text = f"📅 Yaratilgan sana: {datetime.now().strftime('%d.%m.%Y %H:%M')} | © {BOT_NAME}"
+    footer_para.text = f"📅 {datetime.now().strftime('%d.%m.%Y %H:%M')}"
     footer_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
     for run in footer_para.runs:
         run.font.size = Pt(8)
     
-    # Asosiy sarlavha
     main_title = doc.add_heading(f'{title}', level=0)
     main_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
     
-    # Metadata
     doc.add_paragraph()
     meta_para = doc.add_paragraph()
     meta_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    meta_run = meta_para.add_run(f"📋 Hujjat turi: {content_type} | 📅 Sana: {datetime.now().strftime('%d.%m.%Y %H:%M')}")
+    meta_run = meta_para.add_run(f"📋 {content_type} | 📅 {datetime.now().strftime('%d.%m.%Y %H:%M')}")
     meta_run.font.size = Pt(10)
     
     if original_name:
@@ -98,24 +71,20 @@ def create_professional_document(title: str, content_type: str, original_name: s
         meta_run2 = meta_para2.add_run(f"📎 Asl fayl: {original_name}")
         meta_run2.font.size = Pt(9)
     
-    # Ajratuvchi chiziq
-    doc.add_paragraph("━" * 60)
+    doc.add_paragraph("_" * 60)
     doc.add_paragraph()
     
     return doc
 
 def add_content_to_doc(doc: Document, text: str):
-    """Matnni hujjatga qo'shish"""
-    paragraphs = text.split('\n')
-    for para in paragraphs:
+    for para in text.split('\n'):
         if para.strip():
             p = doc.add_paragraph(para.strip())
             p.style.font.size = Pt(12)
 
 # =============== PDF → WORD ===============
 def pdf_to_word(pdf_content: bytes, original_name: str) -> BytesIO:
-    """PDF faylni Word formatiga o'tkazish"""
-    doc = create_professional_document("📄 PDF Hujjat Konvertatsiyasi", "PDF → Word", original_name)
+    doc = create_professional_document("📄 PDF Konvertatsiyasi", "PDF → Word", original_name)
     
     temp_pdf = tempfile.NamedTemporaryFile(suffix='.pdf', delete=False)
     temp_pdf.write(pdf_content)
@@ -124,14 +93,14 @@ def pdf_to_word(pdf_content: bytes, original_name: str) -> BytesIO:
     try:
         with pdfplumber.open(temp_pdf.name) as pdf:
             total_pages = len(pdf.pages)
-            doc.add_paragraph(f"📑 Jami sahifalar soni: {total_pages}")
-            doc.add_paragraph("━" * 60)
+            doc.add_paragraph(f"📑 Jami sahifalar: {total_pages}")
+            doc.add_paragraph("_" * 60)
             doc.add_paragraph()
             
             for page_num, page in enumerate(pdf.pages, 1):
                 text = page.extract_text()
                 if text:
-                    doc.add_heading(f'📖 SAHIFA {page_num} / {total_pages}', level=1)
+                    doc.add_heading(f'📖 Sahifa {page_num}/{total_pages}', level=1)
                     add_content_to_doc(doc, text)
                 
                 tables = page.extract_tables()
@@ -143,12 +112,10 @@ def pdf_to_word(pdf_content: bytes, original_name: str) -> BytesIO:
                             cols = len(table_data[0]) if table_data[0] else 1
                             table = doc.add_table(rows=rows, cols=cols)
                             table.style = 'Table Grid'
-                            
                             for i, row in enumerate(table_data):
                                 for j, cell in enumerate(row):
                                     if cell and j < cols:
                                         table.cell(i, j).text = str(cell)
-                            
                             doc.add_paragraph()
                 
                 if page_num < total_pages:
@@ -163,7 +130,6 @@ def pdf_to_word(pdf_content: bytes, original_name: str) -> BytesIO:
 
 # =============== EXCEL → WORD ===============
 def excel_to_word(file_content: bytes, file_ext: str, original_name: str) -> BytesIO:
-    """Excel faylni Word formatiga o'tkazish"""
     import pandas as pd
     
     doc = create_professional_document("📊 Excel Ma'lumotlari", f"{file_ext.upper()} → Word", original_name)
@@ -173,9 +139,8 @@ def excel_to_word(file_content: bytes, file_ext: str, original_name: str) -> Byt
     else:
         df = pd.read_excel(BytesIO(file_content))
     
-    doc.add_paragraph(f"📈 Qatorlar soni: {len(df)}")
-    doc.add_paragraph(f"📊 Ustunlar soni: {len(df.columns)}")
-    doc.add_paragraph("━" * 60)
+    doc.add_paragraph(f"📈 Qatorlar: {len(df)} | Ustunlar: {len(df.columns)}")
+    doc.add_paragraph("_" * 60)
     doc.add_paragraph()
     
     table = doc.add_table(rows=len(df) + 1, cols=len(df.columns))
@@ -204,10 +169,9 @@ def excel_to_word(file_content: bytes, file_ext: str, original_name: str) -> Byt
 
 # =============== HTML → WORD ===============
 def html_to_word(file_content: bytes, original_name: str) -> BytesIO:
-    """HTML faylni Word formatiga o'tkazish"""
     from bs4 import BeautifulSoup
     
-    doc = create_professional_document("🌐 HTML Hujjat Konvertatsiyasi", "HTML → Word", original_name)
+    doc = create_professional_document("🌐 HTML Konvertatsiyasi", "HTML → Word", original_name)
     
     html = file_content.decode('utf-8')
     soup = BeautifulSoup(html, 'html.parser')
@@ -222,7 +186,6 @@ def html_to_word(file_content: bytes, original_name: str) -> BytesIO:
 
 # =============== EPUB → WORD ===============
 def epub_to_word(file_content: bytes, original_name: str) -> BytesIO:
-    """EPUB faylni Word formatiga o'tkazish"""
     from ebooklib import epub
     from bs4 import BeautifulSoup
     
@@ -234,16 +197,14 @@ def epub_to_word(file_content: bytes, original_name: str) -> BytesIO:
     
     try:
         book = epub.read_epub(temp_epub.name)
-        
         chapter_num = 0
         for item in book.get_items():
             if item.get_type() == 9:
                 chapter_num += 1
                 soup = BeautifulSoup(item.get_content(), 'html.parser')
                 text = soup.get_text()
-                
                 if text.strip():
-                    doc.add_heading(f'📖 BO\'LIM {chapter_num}', level=1)
+                    doc.add_heading(f'📖 Bo\'lim {chapter_num}', level=1)
                     add_content_to_doc(doc, text)
                     doc.add_page_break()
     finally:
@@ -256,10 +217,9 @@ def epub_to_word(file_content: bytes, original_name: str) -> BytesIO:
 
 # =============== MATN → WORD ===============
 def text_to_word(text: str) -> BytesIO:
-    """Matnni Word formatiga o'tkazish"""
     doc = create_professional_document("📝 Matn Konvertatsiyasi", "Matn → Word")
     doc.add_paragraph(f"📏 Belgilar soni: {len(text)}")
-    doc.add_paragraph("━" * 60)
+    doc.add_paragraph("_" * 60)
     doc.add_paragraph()
     add_content_to_doc(doc, text)
     
@@ -270,11 +230,9 @@ def text_to_word(text: str) -> BytesIO:
 
 # =============== RASM OCR ===============
 def image_to_text(image_content: bytes) -> str:
-    """Rasmdan matn olish"""
     try:
         from PIL import Image
         import pytesseract
-        
         image = Image.open(BytesIO(image_content))
         text = pytesseract.image_to_string(image, lang='eng+rus+uzb')
         return text
@@ -284,119 +242,100 @@ def image_to_text(image_content: bytes) -> str:
 # =============== BOT HANDLERLARI ===============
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Start komandasi"""
     user = update.effective_user
     
-    message = f"""✨ *Assalomu alaykum, {user.first_name}!*
+    message = f"""✨ Assalomu alaykum, {user.first_name}!
 
-💼 *{BOT_NAME}* ga xush kelibsiz!
+💼 {BOT_NAME} ga xush kelibsiz!
 
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃   📋 PROFESSIONAL FILE    ┃
-┃   CONVERTER BOT           ┃
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+📌 Quyidagi formatlarni Word (.docx) ga o'tkazadi:
 
-📌 *Quyidagi formatlarni Word (.docx) ga o'tkazadi:*
+📄 PDF hujjatlar
+📊 Excel jadvallari (.xlsx, .xls, .csv)
+🌐 HTML sahifalar
+📚 EPUB elektron kitoblar
+📝 Matn fayllari (.txt, .md, .json, .xml)
+🖼 Rasmlardagi matnlar (OCR)
 
-📄 • PDF hujjatlar
-📊 • Excel jadvallari (.xlsx, .xls, .csv)
-🌐 • HTML sahifalar
-📚 • EPUB elektron kitoblar
-📝 • Matn fayllari (.txt, .md, .json, .xml)
-🖼 • Rasmlardagi matnlar (OCR)
-
-⚙️ *Foydalanish tartibi:*
+⚙️ Foydalanish tartibi:
 1️⃣ Botga fayl yoki matn yuboring
 2️⃣ Konvertatsiya avtomatik amalga oshiriladi
 3️⃣ Tayyor Word faylni yuklab oling
 
-📌 *Cheklovlar:*
+📌 Cheklovlar:
 🔹 Maksimal fayl hajmi: 50 MB
 🔹 Bot 24/7 rejimida ishlaydi
-🔹 Xizmat mutlaqo *bepul* ✅
+🔹 Xizmat mutlaqo bepul ✅
 
-📋 *Buyruqlar:*
-/start - Bosh menyu
-/help - Yordam
-/formats - Formatlar ro'yxati
-/about - Bot haqida
+📋 Buyruqlar:
+/start — Bosh menyu
+/help — Yordam
+/formats — Formatlar ro'yxati
+/about — Bot haqida
 
-👨‍💼 *Admin:* {ADMIN_USERNAME}"""
+👨‍💼 Admin: {ADMIN_USERNAME}"""
 
-    await update.message.reply_text(message, parse_mode='Markdown')
+    await update.message.reply_text(message)
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Yordam komandasi"""
-    message = f"""📖 *YORDAM BO'LIMI*
+    message = f"""📖 YORDAM BO'LIMI
 
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃   📚 FOYDALANISH BO'YICHA ┃
-┃   QO'LLANMA               ┃
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-
-📝 *1. MATN YUBORISH*
+📝 1. MATN YUBORISH
 Oddiy matn yozib yuboring — avtomatik Word faylga o'tkaziladi.
 
-📄 *2. PDF FAYL YUBORISH*
+📄 2. PDF FAYL YUBORISH
 PDF faylni yuboring. Matn va jadvallar to'liq saqlanadi.
 
-📊 *3. EXCEL FAYL YUBORISH*
+📊 3. EXCEL FAYL YUBORISH
 .xlsx, .xls yoki .csv formatdagi fayllarni yuboring.
 
-🌐 *4. HTML FAYL YUBORISH*
+🌐 4. HTML FAYL YUBORISH
 .html fayllarni yuboring.
 
-📚 *5. EPUB FAYL YUBORISH*
+📚 5. EPUB FAYL YUBORISH
 Elektron kitoblarni yuboring.
 
-🖼 *6. RASM YUBORISH*
-Matnli rasm yuboring. OCR texnologiyasi orqali matn ajratib olinadi.
+🖼 6. RASM YUBORISH
+Matnli rasm yuboring. OCR orqali matn ajratib olinadi.
 
-⚠️ *Muhim eslatmalar:*
+⚠️ Muhim eslatmalar:
 • Fayl hajmi 50 MB dan oshmasligi kerak
-• Konvertatsiya vaqti fayl hajmiga bog'liq
 • Barcha fayllar .docx formatiga o'tkaziladi
 
-📞 *Texnik yordam:* {ADMIN_USERNAME}"""
+📞 Texnik yordam: {ADMIN_USERNAME}"""
 
-    await update.message.reply_text(message, parse_mode='Markdown')
+    await update.message.reply_text(message)
 
 async def formats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Formatlar ro'yxati"""
-    message = f"""📋 *QO'LLAB-QUVVATLANADIGAN FORMATLAR*
+    message = f"""📋 QO'LLAB-QUVVATLANADIGAN FORMATLAR
 
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃   📎 FORMATLAR RO'YXATI   ┃
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+📄 Hujjat formatlari:
+• .pdf — PDF hujjatlar
+• .xlsx — Microsoft Excel (2007+)
+• .xls — Microsoft Excel (97-2003)
+• .csv — CSV jadvallar
+• .html, .htm — Web sahifalar
 
-📄 *Hujjat formatlari:*
-• .pdf - PDF hujjatlar
-• .xlsx - Microsoft Excel (2007+)
-• .xls - Microsoft Excel (97-2003)
-• .csv - CSV jadvallar
-• .html, .htm - Web sahifalar
+📚 Elektron kitoblar:
+• .epub — EPUB format
 
-📚 *Elektron kitoblar:*
-• .epub - EPUB format
-
-📝 *Matn formatlari:*
+📝 Matn formatlari:
 • Oddiy matn xabarlar
-• .txt - Matn fayllari
-• .md - Markdown
-• .json - JSON ma'lumotlar
-• .xml - XML ma'lumotlar
+• .txt — Matn fayllari
+• .md — Markdown
+• .json — JSON ma'lumotlar
+• .xml — XML ma'lumotlar
 
-🖼 *Rasm formatlari (OCR):*
+🖼 Rasm formatlari (OCR):
 • .jpg, .jpeg
 • .png
 • .bmp
 
-✅ *Barcha formatlar → .docx (Microsoft Word)*"""
+✅ Barcha formatlar → .docx"""
 
-    await update.message.reply_text(message, parse_mode='Markdown')
+    await update.message.reply_text(message)
 
 async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Admin panel"""
     user_id = update.effective_user.id
     
     if user_id != ADMIN_ID:
@@ -408,85 +347,58 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     hours = uptime.seconds // 3600
     minutes = (uptime.seconds % 3600) // 60
     
-    message = f"""👑 *ADMIN PANEL*
+    message = f"""👑 ADMIN PANEL
 
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃   ⚙️ TIZIM BOSHQARUVI     ┃
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+🟢 Holat: Aktiv
+📌 Versiya: {BOT_VERSION}
+⏱ Ishlash vaqti: {days} kun, {hours} soat, {minutes} daqiqa
 
-🟢 *Tizim holati:* Aktiv
-📌 *Bot versiyasi:* {BOT_VERSION}
-⏱ *Ishlash vaqti:* {days} kun, {hours} soat, {minutes} daqiqa
+📊 Statistika:
+🔄 Jami konvertatsiyalar: {_stats['total_conversions']}
+👥 Foydalanuvchilar: {len(_stats['users'])}
 
-📊 *Statistika:*
-━━━━━━━━━━━━━━━━━━━━━
-🔄 Jami konvertatsiyalar: *{_stats['total_conversions']}*
-👥 Foydalanuvchilar soni: *{len(_stats['users'])}*
+👨‍💼 Admin: {ADMIN_USERNAME}"""
 
-📈 *Formatlar bo'yicha:*
-📄 PDF: *{_stats['pdf_count']}*
-📊 Excel: *{_stats['excel_count']}*
-🌐 HTML: *{_stats['html_count']}*
-📚 EPUB: *{_stats['epub_count']}*
-📝 Matn: *{_stats['text_count']}*
-🖼 Rasm: *{_stats['image_count']}*
-📎 Boshqa: *{_stats['other_count']}*
-
-👨‍💼 *Admin:* {ADMIN_USERNAME}"""
-
-    await update.message.reply_text(message, parse_mode='Markdown')
+    await update.message.reply_text(message)
 
 async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Bot haqida"""
-    message = f"""ℹ️ *BOT HAQIDA*
+    message = f"""ℹ️ BOT HAQIDA
 
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃   📌 MA'LUMOT             ┃
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+🏷 Nomi: {BOT_NAME}
+📌 Versiya: {BOT_VERSION}
 
-🏷 *Nomi:* {BOT_NAME}
-📌 *Versiya:* {BOT_VERSION}
+💼 Ushbu bot fayllarni Microsoft Word (.docx) formatiga professional tarzda o'tkazish uchun yaratilgan.
 
+👨‍💼 Yaratuvchi: {ADMIN_USERNAME}
+📞 Aloqa: {ADMIN_USERNAME}"""
 
-👨‍💼 *Admin:* {ADMIN_USERNAME}
-📞 *Aloqa:* {ADMIN_USERNAME}
-
-© 2026 {BOT_NAME}. Barcha huquqlar himoyalangan."""
-
-    await update.message.reply_text(message, parse_mode='Markdown')
+    await update.message.reply_text(message)
 
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Fayllarni qabul qilish"""
     document = update.message.document
     file_name = document.file_name
     user_id = update.effective_user.id
     
-    # Fayl hajmi tekshiruvi
+    _stats["users"].add(user_id)
+    
     if document.file_size > MAX_FILE_SIZE:
-        await update.message.reply_text(
-            "❌ *Xatolik:* Fayl hajmi 50 MB dan oshmasligi kerak.",
-            parse_mode='Markdown'
-        )
+        await update.message.reply_text("❌ Xatolik: Fayl hajmi 50 MB dan oshmasligi kerak.")
         return
     
-    # Fayl formatini aniqlash
     file_ext = file_name.lower().split('.')[-1] if '.' in file_name else ''
     supported_extensions = ['pdf', 'xlsx', 'xls', 'csv', 'html', 'htm', 'epub', 'txt', 'md', 'json', 'xml']
     
     if file_ext not in supported_extensions:
         await update.message.reply_text(
-            f"❌ *Xatolik:* .{file_ext} formati qo'llab-quvvatlanmaydi.\n"
-            f"📋 Formatlar ro'yxati: /formats",
-            parse_mode='Markdown'
+            f"❌ Xatolik: .{file_ext} formati qo'llab-quvvatlanmaydi.\n"
+            f"📋 Formatlar ro'yxati: /formats"
         )
         return
     
     processing_msg = await update.message.reply_text(
-        f"⏳ *Fayl qayta ishlanmoqda...*\n\n"
-        f"📎 Nomi: *{file_name}*\n"
-        f"📦 Hajmi: *{document.file_size // 1024} KB*\n"
-        f"⏱ Iltimos, kuting...",
-        parse_mode='Markdown'
+        f"⏳ Fayl qayta ishlanmoqda...\n\n"
+        f"📎 Nomi: {file_name}\n"
+        f"📦 Hajmi: {document.file_size // 1024} KB"
     )
     
     try:
@@ -498,53 +410,43 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         if file_ext == 'pdf':
             output_file = pdf_to_word(file_content, file_name)
-            update_stats("pdf", user_id)
         elif file_ext in ['xlsx', 'xls', 'csv']:
             output_file = excel_to_word(file_content, file_ext, file_name)
-            update_stats(file_ext, user_id)
         elif file_ext in ['html', 'htm']:
             output_file = html_to_word(file_content, file_name)
-            update_stats("html", user_id)
         elif file_ext == 'epub':
             output_file = epub_to_word(file_content, file_name)
-            update_stats("epub", user_id)
         else:
             text = file_content.decode('utf-8')
             output_file = text_to_word(text)
-            update_stats("text", user_id)
+        
+        _stats["total_conversions"] += 1
         
         await processing_msg.delete()
         
         await update.message.reply_document(
             document=output_file,
             filename=output_name,
-            caption=f"✅ *Konvertatsiya muvaffaqiyatli yakunlandi!*\n\n"
-                   f"📎 Asl fayl: *{file_name}*\n"
-                   f"📄 Yangi fayl: *{output_name}*\n"
-                   f"🔤 Format: Word (.docx)",
-            parse_mode='Markdown'
+            caption=f"✅ Konvertatsiya muvaffaqiyatli yakunlandi!\n\n"
+                   f"📎 {file_name}\n"
+                   f"📄 {output_name}"
         )
         
     except Exception as e:
         await processing_msg.delete()
         logger.error(f"Xatolik: {e}")
         await update.message.reply_text(
-            f"❌ *Konvertatsiya jarayonida xatolik!*\n\n"
-            f"📎 Fayl: *{file_name}*\n"
-            f"🔍 Xato: {str(e)[:100]}\n\n"
-            f"📞 Adminga murojaat qiling: {ADMIN_USERNAME}",
-            parse_mode='Markdown'
+            f"❌ Konvertatsiya jarayonida xatolik yuz berdi.\n"
+            f"📞 Adminga murojaat qiling: {ADMIN_USERNAME}"
         )
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Rasmlarni qabul qilish"""
     user_id = update.effective_user.id
+    _stats["users"].add(user_id)
     
     processing_msg = await update.message.reply_text(
-        "🖼 *Rasm qayta ishlanmoqda...*\n\n"
-        "🔍 OCR texnologiyasi orqali matn ajratib olinmoqda.\n"
-        "⏱ Iltimos, kuting...",
-        parse_mode='Markdown'
+        "🖼 Rasm qayta ishlanmoqda...\n"
+        "🔍 OCR orqali matn ajratib olinmoqda."
     )
     
     try:
@@ -556,133 +458,106 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         if text and len(text.strip()) > 10:
             output_file = text_to_word(text)
-            update_stats("image", user_id)
+            _stats["total_conversions"] += 1
             
             await processing_msg.delete()
             
             await update.message.reply_document(
                 document=output_file,
                 filename="rasmdagi_matn.docx",
-                caption=f"✅ *Rasmdagi matn muvaffaqiyatli ajratib olindi!*\n\n"
-                       f"📏 Matn hajmi: *{len(text)}* belgi\n"
-                       f"📄 Format: Word (.docx)\n"
-                       f"📁 Fayl: rasmdagi_matn.docx",
-                parse_mode='Markdown'
+                caption=f"✅ Rasmdagi matn muvaffaqiyatli ajratib olindi!\n"
+                       f"📏 Matn hajmi: {len(text)} belgi"
             )
         else:
             await processing_msg.delete()
             await update.message.reply_text(
-                "⚠️ *Rasmdan matn topilmadi!*\n\n"
-                "📌 *Mumkin bo'lgan sabablar:*\n"
+                "⚠️ Rasmdan matn topilmadi.\n\n"
+                "📌 Sabablar:\n"
                 "• Rasmda matn mavjud emas\n"
                 "• Rasm sifati past\n"
                 "• Qo'l yozuvi (faqat bosma matn)\n\n"
-                "💡 Iltimos, aniqroq rasm yuboring.",
-                parse_mode='Markdown'
+                "💡 Aniqroq rasm yuboring."
             )
     
     except Exception as e:
         await processing_msg.delete()
         logger.error(f"OCR xatolik: {e}")
         await update.message.reply_text(
-            f"❌ *Rasmni qayta ishlashda xatolik!*\n"
-            f"📞 Adminga murojaat qiling: {ADMIN_USERNAME}",
-            parse_mode='Markdown'
+            f"❌ Rasmni qayta ishlashda xatolik.\n"
+            f"📞 Admin: {ADMIN_USERNAME}"
         )
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Matn xabarlarni qabul qilish"""
     text = update.message.text
     user_id = update.effective_user.id
+    _stats["users"].add(user_id)
     
     if len(text) < 10:
         await update.message.reply_text(
-            "⚠️ *Matn juda qisqa!*\n\n"
-            "📝 Kamida 10 ta belgidan iborat matn yuboring.\n"
-            "📖 Yordam uchun: /help",
-            parse_mode='Markdown'
+            "⚠️ Matn juda qisqa!\n"
+            "📝 Kamida 10 ta belgi kerak.\n"
+            "📖 /help"
         )
         return
     
-    processing_msg = await update.message.reply_text(
-        "⏳ *Matn qayta ishlanmoqda...*",
-        parse_mode='Markdown'
-    )
+    processing_msg = await update.message.reply_text("⏳ Matn qayta ishlanmoqda...")
     
     try:
         output_file = text_to_word(text)
-        update_stats("text", user_id)
+        _stats["total_conversions"] += 1
         
         await processing_msg.delete()
         
         await update.message.reply_document(
             document=output_file,
             filename="matn.docx",
-            caption=f"✅ *Matn muvaffaqiyatli Word formatiga o'tkazildi!*\n\n"
-                   f"📏 Belgilar soni: *{len(text)}*\n"
-                   f"📄 Fayl nomi: *matn.docx*\n"
-                   f"🔤 Format: Word (.docx)",
-            parse_mode='Markdown'
+            caption=f"✅ Matn Word formatiga o'tkazildi!\n"
+                   f"📏 Belgilar: {len(text)}"
         )
         
     except Exception as e:
         await processing_msg.delete()
-        logger.error(f"Matn xatolik: {e}")
-        await update.message.reply_text(
-            "❌ *Matnni qayta ishlashda xatolik yuz berdi.*",
-            parse_mode='Markdown'
-        )
+        logger.error(f"Xatolik: {e}")
+        await update.message.reply_text("❌ Xatolik yuz berdi.")
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Xatoliklarni boshqarish"""
     logger.error(f"Xatolik: {context.error}")
-    
     try:
         if update and update.effective_message:
             await update.effective_message.reply_text(
-                "❌ *Kutilmagan xatolik yuz berdi.*\n\n"
-                "🔄 Iltimos, qaytadan urinib ko'ring.\n"
-                f"📞 Yordam uchun: {ADMIN_USERNAME}",
-                parse_mode='Markdown'
+                "❌ Kutilmagan xatolik.\n"
+                f"📞 Admin: {ADMIN_USERNAME}"
             )
     except:
         pass
 
 # =============== ASOSIY FUNKSIYA ===============
 def main():
-    """Botni ishga tushirish"""
-    
     if not TOKEN:
         logger.error("❌ TOKEN o'rnatilmagan!")
         return
     
     logger.info(f"🤖 {BOT_NAME} ishga tushirilmoqda...")
-    logger.info(f"📌 Versiya: {BOT_VERSION}")
-    logger.info(f"👨‍💼 Admin: {ADMIN_USERNAME}")
     
     app = Application.builder().token(TOKEN).build()
     
-    # Command handlerlar
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("formats", formats_command))
     app.add_handler(CommandHandler("admin", admin_command))
     app.add_handler(CommandHandler("about", about_command))
     
-    # Message handlerlar
-    app.add_handler(MessageHandler(filters.DOCUMENT, handle_document))
+    app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     
-    # Error handler
     app.add_error_handler(error_handler)
     
-    # Webhook yoki polling
     WEBHOOK_URL = os.getenv("WEBHOOK_URL", "")
     PORT = int(os.getenv("PORT", "8080"))
     
     if WEBHOOK_URL:
-        logger.info(f"🌐 Webhook rejimi: {WEBHOOK_URL}")
+        logger.info(f"🌐 Webhook: {WEBHOOK_URL}")
         app.run_webhook(
             listen="0.0.0.0",
             port=PORT,
