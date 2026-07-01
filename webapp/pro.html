@@ -22,7 +22,6 @@
             --bg-layer-3: #151520;
             --bg-glass: rgba(255, 255, 255, 0.02);
             --bg-glass-strong: rgba(255, 255, 255, 0.04);
-            --bg-glass-hover: rgba(255, 255, 255, 0.06);
             --border-subtle: rgba(255, 255, 255, 0.04);
             --border-default: rgba(255, 255, 255, 0.06);
             --border-strong: rgba(255, 255, 255, 0.1);
@@ -227,15 +226,15 @@
             </div>
         </div>
 
-        <!-- REVERSE -->
+        <!-- REVERSE PANEL -->
         <div class="pro-panel visible" id="panelReverse">
             <div class="panel-title">Word → PDF Converter</div>
-            <div class="upload-pro" id="uploadReverse">
+            <div class="upload-pro" id="uploadReverse" onclick="document.getElementById('fileReverse').click()">
                 <div class="upload-pro-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
-                <div class="upload-pro-title">Upload Word Document</div>
+                <div class="upload-pro-title">Tap to Upload Word Document</div>
                 <div class="upload-pro-subtitle">.docx only — Max 50 MB</div>
             </div>
-            <input type="file" id="fileReverse" accept=".docx,.doc" style="display:none;">
+            <input type="file" id="fileReverse" accept=".docx,.doc" style="position:absolute;opacity:0;pointer-events:none;width:0;height:0;">
             <div class="batch-item" id="fileReverseInfo" style="display:none;">
                 <span class="batch-item-name" id="fileReverseName"></span>
                 <span class="batch-item-size" id="fileReverseSize"></span>
@@ -246,30 +245,30 @@
             </button>
         </div>
 
-        <!-- BATCH -->
+        <!-- BATCH PANEL -->
         <div class="pro-panel" id="panelBatch">
             <div class="panel-title">Batch Convert + ZIP</div>
-            <div class="upload-pro" id="uploadBatch">
+            <div class="upload-pro" id="uploadBatch" onclick="document.getElementById('fileBatch').click()">
                 <div class="upload-pro-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
-                <div class="upload-pro-title">Upload Multiple Files</div>
-                <div class="upload-pro-subtitle">Max 10 files — PDF, Excel, HTML, EPUB — 50 MB each</div>
+                <div class="upload-pro-title">Tap to Upload Multiple Files</div>
+                <div class="upload-pro-subtitle">Max 10 files — 50 MB each</div>
             </div>
-            <input type="file" id="fileBatch" multiple accept=".pdf,.xlsx,.xls,.csv,.html,.htm,.epub,.txt,.md,.json,.xml,.jpg,.jpeg,.png,.bmp,.webp" style="display:none;">
+            <input type="file" id="fileBatch" multiple accept=".pdf,.xlsx,.xls,.csv,.html,.htm,.epub,.txt,.md,.json,.xml,.jpg,.jpeg,.png,.bmp,.webp" style="position:absolute;opacity:0;pointer-events:none;width:0;height:0;">
             <div class="batch-list" id="batchList"></div>
             <button class="btn-pro btn-gold" id="btnBatch" disabled>
                 <span class="btn-content"><span class="btn-text">Convert All & Download ZIP</span><span class="btn-spinner"></span></span>
             </button>
         </div>
 
-        <!-- PASSWORD -->
+        <!-- PASSWORD PANEL -->
         <div class="pro-panel" id="panelPassword">
             <div class="panel-title">PDF Password Protection</div>
-            <div class="upload-pro" id="uploadPassword">
+            <div class="upload-pro" id="uploadPassword" onclick="document.getElementById('filePassword').click()">
                 <div class="upload-pro-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
-                <div class="upload-pro-title">Upload PDF File</div>
+                <div class="upload-pro-title">Tap to Upload PDF File</div>
                 <div class="upload-pro-subtitle">.pdf only — Max 50 MB</div>
             </div>
-            <input type="file" id="filePassword" accept=".pdf" style="display:none;">
+            <input type="file" id="filePassword" accept=".pdf" style="position:absolute;opacity:0;pointer-events:none;width:0;height:0;">
             <div class="batch-item" id="filePasswordInfo" style="display:none;">
                 <span class="batch-item-name" id="filePasswordName"></span>
                 <span class="batch-item-size" id="filePasswordSize"></span>
@@ -342,81 +341,80 @@
         function updateProgress(p) { progressProFill.style.width = p + '%'; progressProVal.textContent = Math.round(p) + '%'; }
         function showResult(name, url) { resultProName.textContent = name; resultPro.classList.add('visible'); downloadProBtn.href = url; downloadProBtn.download = name; }
 
-        // REVERSE
+        // REVERSE - onclick bilan ishlaydi
         let reverseFile = null;
-        document.getElementById('uploadReverse').addEventListener('click', () => document.getElementById('fileReverse').click());
         document.getElementById('fileReverse').addEventListener('change', e => {
-            if (e.target.files[0]) { reverseFile = e.target.files[0]; showFileInfo('fileReverseInfo', 'fileReverseName', 'fileReverseSize', reverseFile); document.getElementById('btnReverse').disabled = false; }
+            if (e.target.files[0]) { 
+                reverseFile = e.target.files[0]; 
+                document.getElementById('fileReverseInfo').style.display = 'flex';
+                document.getElementById('fileReverseName').textContent = reverseFile.name;
+                document.getElementById('fileReverseSize').textContent = (reverseFile.size/1024/1024).toFixed(2) + ' MB';
+                document.getElementById('btnReverse').disabled = false; 
+            }
         });
-        document.getElementById('fileReverseRemove').addEventListener('click', () => { reverseFile = null; document.getElementById('fileReverseInfo').style.display = 'none'; document.getElementById('btnReverse').disabled = true; document.getElementById('fileReverse').value = ''; });
-        document.getElementById('btnReverse').addEventListener('click', () => convertFile(reverseFile, 'reverse'));
+        document.getElementById('fileReverseRemove').addEventListener('click', () => { 
+            reverseFile = null; 
+            document.getElementById('fileReverseInfo').style.display = 'none'; 
+            document.getElementById('btnReverse').disabled = true; 
+            document.getElementById('fileReverse').value = ''; 
+        });
+        document.getElementById('btnReverse').addEventListener('click', () => {
+            if (!reverseFile) return;
+            if (haptic) haptic.impactOccurred('heavy');
+            showProgress(); resultPro.classList.remove('visible');
+            const fd = new FormData(); fd.append('file', reverseFile); fd.append('type', 'reverse');
+            let p = 0; const iv = setInterval(() => { p += Math.random()*10+3; if (p>88) p=88; updateProgress(p); }, 300);
+            fetch('/api/pro/convert', { method:'POST', body:fd })
+                .then(r => { clearInterval(iv); if (!r.ok) return r.json().then(e => { throw new Error(e.error); }); updateProgress(100); return r.blob(); })
+                .then(blob => {
+                    const url = URL.createObjectURL(blob);
+                    const name = reverseFile.name.replace(/\.[^.]+$/, '') + '.pdf';
+                    setTimeout(() => { hideProgress(); showResult(name, url); showToast('Conversion complete', 'success'); if (haptic) haptic.notificationOccurred('success'); }, 400);
+                })
+                .catch(e => { clearInterval(iv); hideProgress(); showToast('Error: ' + e.message, 'error'); });
+        });
 
         // BATCH
-        document.getElementById('uploadBatch').addEventListener('click', () => document.getElementById('fileBatch').click());
         document.getElementById('fileBatch').addEventListener('change', e => {
             const files = Array.from(e.target.files).slice(0, 10);
             batchFiles = files;
-            renderBatchList();
-            document.getElementById('btnBatch').disabled = batchFiles.length === 0;
-        });
-        function renderBatchList() {
             const list = document.getElementById('batchList');
             list.innerHTML = batchFiles.map((f, i) => `<div class="batch-item"><span class="batch-item-name">${f.name}</span><span class="batch-item-size">${(f.size/1024/1024).toFixed(2)} MB</span><button class="batch-item-remove" onclick="removeBatchFile(${i})">✕</button></div>`).join('');
             list.classList.toggle('visible', batchFiles.length > 0);
-        }
-        function removeBatchFile(i) { batchFiles.splice(i, 1); renderBatchList(); document.getElementById('btnBatch').disabled = batchFiles.length === 0; if (batchFiles.length === 0) document.getElementById('fileBatch').value = ''; }
-        document.getElementById('btnBatch').addEventListener('click', () => convertBatch());
-
-        // PASSWORD
-        let passwordFile = null;
-        document.getElementById('uploadPassword').addEventListener('click', () => document.getElementById('filePassword').click());
-        document.getElementById('filePassword').addEventListener('change', e => {
-            if (e.target.files[0]) { passwordFile = e.target.files[0]; showFileInfo('filePasswordInfo', 'filePasswordName', 'filePasswordSize', passwordFile); }
+            document.getElementById('btnBatch').disabled = batchFiles.length === 0;
         });
-        document.getElementById('filePasswordRemove').addEventListener('click', () => { passwordFile = null; document.getElementById('filePasswordInfo').style.display = 'none'; document.getElementById('filePassword').value = ''; });
-        document.getElementById('btnLock').addEventListener('click', () => processPassword('lock'));
-        document.getElementById('btnUnlock').addEventListener('click', () => processPassword('unlock'));
-
-        function showFileInfo(infoId, nameId, sizeId, file) {
-            document.getElementById(infoId).style.display = 'flex';
-            document.getElementById(nameId).textContent = file.name;
-            document.getElementById(sizeId).textContent = (file.size/1024/1024).toFixed(2) + ' MB';
-        }
-
-        async function convertFile(file, type) {
-            if (!file) return;
-            if (haptic) haptic.impactOccurred('heavy');
-            showProgress(); resultPro.classList.remove('visible');
-            const fd = new FormData(); fd.append('file', file); fd.append('type', type);
-            let p = 0; const iv = setInterval(() => { p += Math.random()*10+3; if (p>88) p=88; updateProgress(p); }, 300);
-            try {
-                const r = await fetch('/api/pro/convert', { method:'POST', body:fd });
-                clearInterval(iv);
-                if (!r.ok) { const e = await r.json().catch(()=>({error:'Failed'})); throw new Error(e.error); }
-                updateProgress(100);
-                const blob = await r.blob(); const url = URL.createObjectURL(blob);
-                const name = file.name.replace(/\.[^.]+$/, '') + '.pdf';
-                setTimeout(() => { hideProgress(); showResult(name, url); showToast('Conversion complete', 'success'); if (haptic) haptic.notificationOccurred('success'); }, 400);
-            } catch(e) { clearInterval(iv); hideProgress(); showToast('Error: ' + e.message, 'error'); }
-        }
-
-        async function convertBatch() {
+        function removeBatchFile(i) { batchFiles.splice(i, 1); document.getElementById('fileBatch').value = ''; document.getElementById('batchList').classList.remove('visible'); document.getElementById('btnBatch').disabled = true; }
+        document.getElementById('btnBatch').addEventListener('click', () => {
             if (batchFiles.length === 0) return;
             if (haptic) haptic.impactOccurred('heavy');
             showProgress(); resultPro.classList.remove('visible');
             const fd = new FormData(); batchFiles.forEach(f => fd.append('files', f));
             let p = 0; const iv = setInterval(() => { p += Math.random()*5+1; if (p>90) p=90; updateProgress(p); }, 500);
-            try {
-                const r = await fetch('/api/pro/batch', { method:'POST', body:fd });
-                clearInterval(iv);
-                if (!r.ok) { const e = await r.json().catch(()=>({error:'Failed'})); throw new Error(e.error); }
-                updateProgress(100);
-                const blob = await r.blob(); const url = URL.createObjectURL(blob);
-                setTimeout(() => { hideProgress(); showResult('converted_files.zip', url); showToast('Batch complete', 'success'); if (haptic) haptic.notificationOccurred('success'); }, 400);
-            } catch(e) { clearInterval(iv); hideProgress(); showToast('Error: ' + e.message, 'error'); }
-        }
+            fetch('/api/pro/batch', { method:'POST', body:fd })
+                .then(r => { clearInterval(iv); if (!r.ok) return r.json().then(e => { throw new Error(e.error); }); updateProgress(100); return r.blob(); })
+                .then(blob => {
+                    const url = URL.createObjectURL(blob);
+                    setTimeout(() => { hideProgress(); showResult('converted_files.zip', url); showToast('Batch complete', 'success'); if (haptic) haptic.notificationOccurred('success'); }, 400);
+                })
+                .catch(e => { clearInterval(iv); hideProgress(); showToast('Error: ' + e.message, 'error'); });
+        });
 
-        async function processPassword(action) {
+        // PASSWORD
+        let passwordFile = null;
+        document.getElementById('filePassword').addEventListener('change', e => {
+            if (e.target.files[0]) { 
+                passwordFile = e.target.files[0]; 
+                document.getElementById('filePasswordInfo').style.display = 'flex';
+                document.getElementById('filePasswordName').textContent = passwordFile.name;
+                document.getElementById('filePasswordSize').textContent = (passwordFile.size/1024/1024).toFixed(2) + ' MB';
+            }
+        });
+        document.getElementById('filePasswordRemove').addEventListener('click', () => { 
+            passwordFile = null; 
+            document.getElementById('filePasswordInfo').style.display = 'none'; 
+            document.getElementById('filePassword').value = ''; 
+        });
+        function processPassword(action) {
             if (!passwordFile) return;
             const password = document.getElementById('passwordInput').value;
             if (!password) { showToast('Enter password', 'error'); return; }
@@ -424,16 +422,17 @@
             showProgress(); resultPro.classList.remove('visible');
             const fd = new FormData(); fd.append('file', passwordFile); fd.append('password', password); fd.append('action', action);
             let p = 0; const iv = setInterval(() => { p += Math.random()*15+5; if (p>85) p=85; updateProgress(p); }, 300);
-            try {
-                const r = await fetch('/api/pro/password', { method:'POST', body:fd });
-                clearInterval(iv);
-                if (!r.ok) { const e = await r.json().catch(()=>({error:'Failed'})); throw new Error(e.error); }
-                updateProgress(100);
-                const blob = await r.blob(); const url = URL.createObjectURL(blob);
-                const name = action === 'lock' ? 'locked_' + passwordFile.name : 'unlocked_' + passwordFile.name;
-                setTimeout(() => { hideProgress(); showResult(name, url); showToast('Done!', 'success'); if (haptic) haptic.notificationOccurred('success'); }, 400);
-            } catch(e) { clearInterval(iv); hideProgress(); showToast('Error: ' + e.message, 'error'); }
+            fetch('/api/pro/password', { method:'POST', body:fd })
+                .then(r => { clearInterval(iv); if (!r.ok) return r.json().then(e => { throw new Error(e.error); }); updateProgress(100); return r.blob(); })
+                .then(blob => {
+                    const url = URL.createObjectURL(blob);
+                    const name = (action === 'lock' ? 'locked_' : 'unlocked_') + passwordFile.name;
+                    setTimeout(() => { hideProgress(); showResult(name, url); showToast('Done!', 'success'); if (haptic) haptic.notificationOccurred('success'); }, 400);
+                })
+                .catch(e => { clearInterval(iv); hideProgress(); showToast('Error: ' + e.message, 'error'); });
         }
+        document.getElementById('btnLock').addEventListener('click', () => processPassword('lock'));
+        document.getElementById('btnUnlock').addEventListener('click', () => processPassword('unlock'));
     </script>
 </body>
 </html>
