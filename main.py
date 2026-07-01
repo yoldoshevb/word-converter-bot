@@ -6,10 +6,11 @@ import tempfile
 import asyncio
 import sqlite3
 import threading
+import requests
 from datetime import datetime
 from io import BytesIO
 
-import fitz  # PyMuPDF
+import fitz
 from docx import Document
 from docx.shared import Pt, Cm, RGBColor, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -88,6 +89,32 @@ def api_convert():
         )
     except Exception as e:
         logger.error(f"API xatolik: {e}")
+        return jsonify({'error': str(e)[:200]}), 500
+
+@flask_app.route('/api/send-to-bot', methods=['POST'])
+def send_to_bot():
+    """Web App natijasini Telegram bot orqali foydalanuvchiga yuborish"""
+    try:
+        file = request.files.get('file')
+        user_id = request.form.get('user_id')
+        
+        if not file or not user_id:
+            return jsonify({'error': 'Fayl yoki user_id topilmadi'}), 400
+        
+        url = f"https://api.telegram.org/bot{TOKEN}/sendDocument"
+        files = {'document': (file.filename, file.read(), file.content_type or 'application/octet-stream')}
+        data = {'chat_id': int(user_id), 'caption': '✅ Konvertatsiya natijangiz tayyor!'}
+        
+        response = requests.post(url, data=data, files=files, timeout=30)
+        
+        if response.status_code == 200:
+            return jsonify({'success': True})
+        else:
+            logger.error(f"Botga yuborishda xatolik: {response.text}")
+            return jsonify({'error': 'Botga yuborib bolmadi'}), 500
+            
+    except Exception as e:
+        logger.error(f"send-to-bot xatolik: {e}")
         return jsonify({'error': str(e)[:200]}), 500
 
 def run_flask():
@@ -1131,7 +1158,6 @@ def main():
     logger.info(f"🤖 {BOT_NAME} ishga tushmoqda...")
     init_db()
     
-    # Flask serverni alohida thread'da ishga tushirish
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
     logger.info("🌐 Flask Web App server ishga tushdi")
