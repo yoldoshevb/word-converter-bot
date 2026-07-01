@@ -16,8 +16,6 @@
         :root {
             --font-sans: 'Inter', 'Manrope', -apple-system, system-ui, sans-serif;
             --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
-            
-            /* Premium Dark Palette */
             --bg-root: #050508;
             --bg-layer-1: #0a0a10;
             --bg-layer-2: #0f0f18;
@@ -25,17 +23,14 @@
             --bg-glass: rgba(255, 255, 255, 0.02);
             --bg-glass-strong: rgba(255, 255, 255, 0.04);
             --bg-glass-hover: rgba(255, 255, 255, 0.06);
-            
             --border-subtle: rgba(255, 255, 255, 0.04);
             --border-default: rgba(255, 255, 255, 0.06);
             --border-strong: rgba(255, 255, 255, 0.1);
             --border-accent: rgba(139, 92, 246, 0.3);
             --border-gold: rgba(245, 158, 11, 0.3);
-            
             --text-primary: #fafafa;
             --text-secondary: #a1a1aa;
             --text-tertiary: #71717a;
-            
             --accent: #8b5cf6;
             --accent-secondary: #a78bfa;
             --accent-glow: rgba(139, 92, 246, 0.4);
@@ -43,27 +38,22 @@
             --gold-glow: rgba(245, 158, 11, 0.4);
             --success: #22c55e;
             --danger: #ef4444;
-            
             --radius-sm: 8px;
             --radius-md: 12px;
             --radius-lg: 16px;
             --radius-xl: 20px;
             --radius-2xl: 28px;
             --radius-full: 9999px;
-            
             --shadow-sm: 0 1px 3px rgba(0,0,0,0.5);
             --shadow-md: 0 4px 12px rgba(0,0,0,0.6);
             --shadow-lg: 0 12px 40px rgba(0,0,0,0.7);
             --shadow-glow: 0 0 60px var(--accent-glow);
             --shadow-gold: 0 0 40px var(--gold-glow);
-            
             --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
             --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-            
             --safe-top: env(safe-area-inset-top, 0px);
             --safe-bottom: env(safe-area-inset-bottom, 0px);
         }
-
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html { font-size: 16px; -webkit-text-size-adjust: 100%; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; overscroll-behavior: none; }
         body {
@@ -77,31 +67,21 @@
             -webkit-tap-highlight-color: transparent;
             -webkit-user-select: none; user-select: none;
         }
-
-        /* Ambient */
         .ambient-grid {
             position: fixed; inset: 0; pointer-events: none; z-index: 0;
-            background-image: 
-                linear-gradient(rgba(139, 92, 246, 0.015) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(139, 92, 246, 0.015) 1px, transparent 1px);
+            background-image: linear-gradient(rgba(139, 92, 246, 0.015) 1px, transparent 1px), linear-gradient(90deg, rgba(139, 92, 246, 0.015) 1px, transparent 1px);
             background-size: 80px 80px;
             mask-image: radial-gradient(ellipse at 50% 0%, black 40%, transparent 70%);
         }
-        .ambient-orb {
-            position: fixed; border-radius: 50%; filter: blur(180px); pointer-events: none; z-index: 0; opacity: 0.1;
-        }
+        .ambient-orb { position: fixed; border-radius: 50%; filter: blur(180px); pointer-events: none; z-index: 0; opacity: 0.1; }
         .ambient-orb-1 { width: 600px; height: 600px; background: var(--accent); top: -20%; right: -15%; }
         .ambient-orb-2 { width: 400px; height: 400px; background: var(--gold); bottom: -10%; left: -10%; }
-
-        /* App Shell */
         .app-shell {
             position: relative; z-index: 1;
             max-width: 640px; margin: 0 auto;
             padding: calc(var(--safe-top) + 24px) 20px calc(var(--safe-bottom) + 40px);
             display: flex; flex-direction: column; gap: 20px;
         }
-
-        /* PRO Badge Header */
         .pro-header {
             display: flex; align-items: center; justify-content: space-between;
             padding: 12px 16px;
@@ -120,104 +100,47 @@
             color: var(--accent-secondary);
             animation: badgeGlow 3s ease-in-out infinite;
         }
-        @keyframes badgeGlow {
-            0%, 100% { box-shadow: 0 0 15px rgba(139, 92, 246, 0.2); }
-            50% { box-shadow: 0 0 30px rgba(139, 92, 246, 0.4); }
-        }
+        @keyframes badgeGlow { 0%, 100% { box-shadow: 0 0 15px rgba(139, 92, 246, 0.2); } 50% { box-shadow: 0 0 30px rgba(139, 92, 246, 0.4); } }
         .pro-badge svg { width: 16px; height: 16px; }
-        .pro-user {
-            display: flex; align-items: center; gap: 8px;
-            font-size: 13px; font-weight: 500; color: var(--text-secondary);
-        }
-        .pro-avatar {
-            width: 30px; height: 30px; border-radius: 50%;
-            background: linear-gradient(135deg, var(--accent), var(--gold));
-            display: flex; align-items: center; justify-content: center;
-            font-weight: 700; font-size: 12px; color: #fff;
-        }
+        .pro-user { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: var(--text-secondary); }
+        .pro-avatar { width: 30px; height: 30px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--gold)); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; color: #fff; }
         .pro-status-dot { width: 7px; height: 7px; background: var(--success); border-radius: 50%; box-shadow: 0 0 8px rgba(34, 197, 94, 0.6); }
-
-        /* Hero */
-        .pro-hero {
-            text-align: center; padding: 10px 0;
-        }
-        .pro-hero-title {
-            font-size: 38px; font-weight: 900; letter-spacing: -0.03em; line-height: 1.1;
-            background: linear-gradient(135deg, #fafafa 0%, #a78bfa 50%, #f59e0b 100%);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-        }
-        .pro-hero-subtitle {
-            font-size: 13px; color: var(--text-tertiary); margin-top: 6px; font-weight: 400;
-        }
-
-        /* Feature Cards */
-        .pro-features {
-            display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;
-        }
+        .pro-hero { text-align: center; padding: 10px 0; }
+        .pro-hero-title { font-size: 38px; font-weight: 900; letter-spacing: -0.03em; line-height: 1.1; background: linear-gradient(135deg, #fafafa 0%, #a78bfa 50%, #f59e0b 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+        .pro-hero-subtitle { font-size: 13px; color: var(--text-tertiary); margin-top: 6px; font-weight: 400; }
+        .pro-features { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
         .pro-feature-card {
-            background: var(--bg-layer-2);
-            border: 1px solid var(--border-subtle);
-            border-radius: var(--radius-lg);
-            padding: 14px; text-align: center;
-            transition: all 0.3s var(--ease-out-expo);
-            cursor: pointer;
+            background: var(--bg-layer-2); border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg); padding: 14px; text-align: center;
+            transition: all 0.3s var(--ease-out-expo); cursor: pointer;
         }
-        .pro-feature-card.active {
-            border-color: var(--accent);
-            background: rgba(139, 92, 246, 0.06);
-            box-shadow: 0 0 25px rgba(139, 92, 246, 0.1);
-        }
-        .pro-feature-icon {
-            display: inline-flex; align-items: center; justify-content: center;
-            width: 40px; height: 40px; border-radius: var(--radius-md);
-            margin-bottom: 8px;
-        }
+        .pro-feature-card.active { border-color: var(--accent); background: rgba(139, 92, 246, 0.06); box-shadow: 0 0 25px rgba(139, 92, 246, 0.1); }
+        .pro-feature-icon { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: var(--radius-md); margin-bottom: 8px; }
         .pro-feature-icon.convert { background: rgba(139, 92, 246, 0.1); }
         .pro-feature-icon.batch { background: rgba(245, 158, 11, 0.1); }
         .pro-feature-icon.lock { background: rgba(34, 197, 94, 0.1); }
         .pro-feature-title { font-size: 12px; font-weight: 700; color: var(--text-primary); }
         .pro-feature-desc { font-size: 10px; color: var(--text-tertiary); margin-top: 2px; }
-
-        /* Main Panel */
         .pro-panel {
-            background: var(--bg-layer-1);
-            border: 1px solid var(--border-default);
-            border-radius: var(--radius-2xl);
-            padding: 24px;
-            display: none;
+            background: var(--bg-layer-1); border: 1px solid var(--border-default);
+            border-radius: var(--radius-2xl); padding: 24px; display: none;
             flex-direction: column; gap: 18px;
             animation: panelIn 0.4s var(--ease-spring);
         }
         .pro-panel.visible { display: flex; }
-        @keyframes panelIn {
-            from { opacity: 0; transform: translateY(12px) scale(0.97); }
-            to { opacity: 1; transform: translateY(0) scale(1); }
-        }
-
-        .panel-title {
-            font-size: 18px; font-weight: 700; text-align: center;
-            color: var(--text-primary);
-        }
-
-        /* Upload Area */
+        @keyframes panelIn { from { opacity: 0; transform: translateY(12px) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        .panel-title { font-size: 18px; font-weight: 700; text-align: center; color: var(--text-primary); }
         .upload-pro {
-            border: 2px dashed var(--border-default);
-            border-radius: var(--radius-xl);
+            border: 2px dashed var(--border-default); border-radius: var(--radius-xl);
             padding: 30px 20px; text-align: center; cursor: pointer;
-            transition: all 0.35s var(--ease-out-expo);
-            background: var(--bg-layer-2);
+            transition: all 0.35s var(--ease-out-expo); background: var(--bg-layer-2);
         }
         .upload-pro.drag-over { border-color: var(--accent); background: rgba(139, 92, 246, 0.04); transform: scale(0.98); }
         .upload-pro.has-files { border-color: var(--success); background: rgba(34, 197, 94, 0.03); }
         .upload-pro-icon svg { width: 32px; height: 32px; stroke: var(--accent); }
         .upload-pro-title { font-size: 15px; font-weight: 600; margin-top: 8px; }
         .upload-pro-subtitle { font-size: 11px; color: var(--text-tertiary); margin-top: 4px; }
-
-        /* Batch File List */
-        .batch-list {
-            display: none; flex-direction: column; gap: 8px;
-            max-height: 250px; overflow-y: auto;
-        }
+        .batch-list { display: none; flex-direction: column; gap: 8px; max-height: 250px; overflow-y: auto; }
         .batch-list.visible { display: flex; }
         .batch-item {
             display: flex; align-items: center; gap: 10px;
@@ -226,35 +149,13 @@
         }
         .batch-item-name { flex: 1; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .batch-item-size { color: var(--text-tertiary); font-family: var(--font-mono); font-size: 10px; }
-        .batch-item-remove {
-            width: 24px; height: 24px; border: none; border-radius: 50%;
-            background: transparent; cursor: pointer; color: var(--text-tertiary);
-            display: flex; align-items: center; justify-content: center;
-        }
+        .batch-item-remove { width: 24px; height: 24px; border: none; border-radius: 50%; background: transparent; cursor: pointer; color: var(--text-tertiary); display: flex; align-items: center; justify-content: center; }
         .batch-item-remove:active { background: rgba(239, 68, 68, 0.15); color: var(--danger); }
-
-        /* Password Input */
-        .password-input-group {
-            display: flex; gap: 10px;
-        }
-        .password-input {
-            flex: 1; padding: 12px 16px;
-            background: var(--bg-layer-2); border: 1px solid var(--border-default);
-            border-radius: var(--radius-md); color: var(--text-primary);
-            font-family: var(--font-mono); font-size: 14px; outline: none;
-            transition: all 0.3s;
-        }
+        .password-input-group { display: flex; gap: 10px; }
+        .password-input { flex: 1; padding: 12px 16px; background: var(--bg-layer-2); border: 1px solid var(--border-default); border-radius: var(--radius-md); color: var(--text-primary); font-family: var(--font-mono); font-size: 14px; outline: none; transition: all 0.3s; }
         .password-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1); }
         .password-input::placeholder { color: var(--text-tertiary); }
-
-        /* Buttons */
-        .btn-pro {
-            display: block; width: 100%; padding: 14px;
-            border: none; border-radius: var(--radius-full);
-            font-family: var(--font-sans); font-size: 15px; font-weight: 600;
-            cursor: pointer; transition: all 0.3s var(--ease-out-expo);
-            color: #fff;
-        }
+        .btn-pro { display: block; width: 100%; padding: 14px; border: none; border-radius: var(--radius-full); font-family: var(--font-sans); font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.3s var(--ease-out-expo); color: #fff; }
         .btn-primary { background: linear-gradient(135deg, var(--accent), #6d28d9); }
         .btn-primary:disabled { opacity: 0.3; cursor: not-allowed; }
         .btn-primary:not(:disabled):hover { box-shadow: var(--shadow-glow); transform: translateY(-1px); }
@@ -262,76 +163,27 @@
         .btn-gold { background: linear-gradient(135deg, var(--gold), #d97706); }
         .btn-gold:hover { box-shadow: var(--shadow-gold); }
         .btn-success { background: var(--success); }
-
         .btn-content { display: flex; align-items: center; justify-content: center; gap: 8px; }
-        .btn-spinner {
-            display: none; width: 18px; height: 18px;
-            border: 2px solid #fff; border-top-color: transparent;
-            border-radius: 50%; animation: spin 0.7s linear infinite;
-        }
+        .btn-spinner { display: none; width: 18px; height: 18px; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: spin 0.7s linear infinite; }
         .btn-pro.loading .btn-text, .btn-pro.loading .btn-icon { display: none; }
         .btn-pro.loading .btn-spinner { display: block; }
         @keyframes spin { to { transform: rotate(360deg); } }
-
-        /* Progress */
-        .progress-pro {
-            display: none; background: var(--bg-layer-1);
-            border: 1px solid var(--border-default); border-radius: var(--radius-lg);
-            padding: 16px; animation: panelIn 0.4s var(--ease-spring);
-        }
+        .progress-pro { display: none; background: var(--bg-layer-1); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: 16px; animation: panelIn 0.4s var(--ease-spring); }
         .progress-pro.visible { display: block; }
         .progress-header { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 10px; }
         .progress-track { height: 5px; background: var(--bg-layer-2); border-radius: var(--radius-full); overflow: hidden; }
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, var(--accent), var(--gold), var(--success));
-            background-size: 200% 100%;
-            border-radius: var(--radius-full);
-            width: 0%; transition: width 0.4s;
-            animation: shimmer 2s infinite;
-        }
-        @keyframes shimmer {
-            0% { background-position: 200% 0; }
-            100% { background-position: -200% 0; }
-        }
-
-        /* Result */
-        .result-pro {
-            display: none; background: var(--bg-layer-1);
-            border: 1px solid rgba(34, 197, 94, 0.3); border-radius: var(--radius-xl);
-            padding: 28px 20px; text-align: center;
-            animation: panelIn 0.4s var(--ease-spring);
-        }
+        .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--gold), var(--success)); background-size: 200% 100%; border-radius: var(--radius-full); width: 0%; transition: width 0.4s; animation: shimmer 2s infinite; }
+        @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+        .result-pro { display: none; background: var(--bg-layer-1); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: var(--radius-xl); padding: 28px 20px; text-align: center; animation: panelIn 0.4s var(--ease-spring); }
         .result-pro.visible { display: block; }
-        .result-pro .check-icon {
-            display: inline-flex; width: 56px; height: 56px;
-            border-radius: 50%; background: rgba(34, 197, 94, 0.1);
-            align-items: center; justify-content: center; margin-bottom: 12px;
-        }
+        .result-pro .check-icon { display: inline-flex; width: 56px; height: 56px; border-radius: 50%; background: rgba(34, 197, 94, 0.1); align-items: center; justify-content: center; margin-bottom: 12px; }
         .result-pro .result-title { font-size: 20px; font-weight: 700; color: var(--success); }
         .result-pro .result-filename { font-size: 12px; color: var(--text-tertiary); margin: 4px 0 16px; font-family: var(--font-mono); }
-
-        /* Toast */
-        .toast-pro {
-            position: fixed; top: calc(var(--safe-top) + 16px); left: 50%;
-            transform: translateX(-50%) translateY(-120px); z-index: 999;
-            background: var(--bg-layer-3); border: 1px solid var(--border-strong);
-            padding: 10px 20px; border-radius: var(--radius-full);
-            font-size: 13px; font-weight: 500;
-            transition: transform 0.35s var(--ease-spring);
-            box-shadow: var(--shadow-lg);
-            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-        }
+        .toast-pro { position: fixed; top: calc(var(--safe-top) + 16px); left: 50%; transform: translateX(-50%) translateY(-120px); z-index: 999; background: var(--bg-layer-3); border: 1px solid var(--border-strong); padding: 10px 20px; border-radius: var(--radius-full); font-size: 13px; font-weight: 500; transition: transform 0.35s var(--ease-spring); box-shadow: var(--shadow-lg); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
         .toast-pro.show { transform: translateX(-50%) translateY(0); }
         .toast-pro.success { border-color: rgba(34, 197, 94, 0.5); }
         .toast-pro.error { border-color: rgba(239, 68, 68, 0.5); }
-
-        /* Responsive */
-        @media (max-width: 480px) {
-            .pro-features { grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
-            .pro-feature-card { padding: 10px 6px; }
-            .pro-hero-title { font-size: 30px; }
-        }
+        @media (max-width: 480px) { .pro-features { grid-template-columns: 1fr 1fr 1fr; gap: 6px; } .pro-feature-card { padding: 10px 6px; } .pro-hero-title { font-size: 30px; } }
     </style>
 </head>
 <body>
@@ -340,7 +192,6 @@
     <div class="ambient-orb ambient-orb-2"></div>
 
     <main class="app-shell">
-        <!-- PRO Header -->
         <div class="pro-header">
             <div class="pro-badge">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
@@ -353,48 +204,38 @@
             </div>
         </div>
 
-        <!-- Hero -->
         <div class="pro-hero">
             <h1 class="pro-hero-title">Convert Pro</h1>
             <p class="pro-hero-subtitle">Premium document processing engine</p>
         </div>
 
-        <!-- Feature Cards -->
         <div class="pro-features" id="proFeatures">
             <div class="pro-feature-card active" data-mode="reverse">
-                <div class="pro-feature-icon convert">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/></svg>
-                </div>
+                <div class="pro-feature-icon convert"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/></svg></div>
                 <div class="pro-feature-title">Word → PDF</div>
                 <div class="pro-feature-desc">Reverse convert</div>
             </div>
             <div class="pro-feature-card" data-mode="batch">
-                <div class="pro-feature-icon batch">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-                </div>
+                <div class="pro-feature-icon batch"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></div>
                 <div class="pro-feature-title">Batch + ZIP</div>
                 <div class="pro-feature-desc">Up to 10 files</div>
             </div>
             <div class="pro-feature-card" data-mode="password">
-                <div class="pro-feature-icon lock">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                </div>
+                <div class="pro-feature-icon lock"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
                 <div class="pro-feature-title">PDF Parol</div>
                 <div class="pro-feature-desc">Lock / Unlock</div>
             </div>
         </div>
 
-        <!-- REVERSE CONVERT PANEL -->
+        <!-- REVERSE -->
         <div class="pro-panel visible" id="panelReverse">
             <div class="panel-title">Word → PDF Converter</div>
             <div class="upload-pro" id="uploadReverse">
-                <div class="upload-pro-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                </div>
+                <div class="upload-pro-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
                 <div class="upload-pro-title">Upload Word Document</div>
                 <div class="upload-pro-subtitle">.docx only — Max 50 MB</div>
-                <input type="file" id="fileReverse" hidden accept=".docx">
             </div>
+            <input type="file" id="fileReverse" accept=".docx,.doc" style="display:none;">
             <div class="batch-item" id="fileReverseInfo" style="display:none;">
                 <span class="batch-item-name" id="fileReverseName"></span>
                 <span class="batch-item-size" id="fileReverseSize"></span>
@@ -405,68 +246,58 @@
             </button>
         </div>
 
-        <!-- BATCH PANEL -->
+        <!-- BATCH -->
         <div class="pro-panel" id="panelBatch">
             <div class="panel-title">Batch Convert + ZIP</div>
             <div class="upload-pro" id="uploadBatch">
-                <div class="upload-pro-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                </div>
+                <div class="upload-pro-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
                 <div class="upload-pro-title">Upload Multiple Files</div>
                 <div class="upload-pro-subtitle">Max 10 files — PDF, Excel, HTML, EPUB — 50 MB each</div>
-                <input type="file" id="fileBatch" hidden multiple accept=".pdf,.xlsx,.xls,.csv,.html,.htm,.epub,.txt,.md,.json,.xml,.jpg,.jpeg,.png,.bmp,.webp">
             </div>
+            <input type="file" id="fileBatch" multiple accept=".pdf,.xlsx,.xls,.csv,.html,.htm,.epub,.txt,.md,.json,.xml,.jpg,.jpeg,.png,.bmp,.webp" style="display:none;">
             <div class="batch-list" id="batchList"></div>
             <button class="btn-pro btn-gold" id="btnBatch" disabled>
                 <span class="btn-content"><span class="btn-text">Convert All & Download ZIP</span><span class="btn-spinner"></span></span>
             </button>
         </div>
 
-        <!-- PASSWORD PANEL -->
+        <!-- PASSWORD -->
         <div class="pro-panel" id="panelPassword">
             <div class="panel-title">PDF Password Protection</div>
             <div class="upload-pro" id="uploadPassword">
-                <div class="upload-pro-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                </div>
+                <div class="upload-pro-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
                 <div class="upload-pro-title">Upload PDF File</div>
                 <div class="upload-pro-subtitle">.pdf only — Max 50 MB</div>
-                <input type="file" id="filePassword" hidden accept=".pdf">
             </div>
+            <input type="file" id="filePassword" accept=".pdf" style="display:none;">
             <div class="batch-item" id="filePasswordInfo" style="display:none;">
                 <span class="batch-item-name" id="filePasswordName"></span>
                 <span class="batch-item-size" id="filePasswordSize"></span>
                 <button class="batch-item-remove" id="filePasswordRemove">✕</button>
             </div>
-            <div style="display:flex;gap:8px;">
-                <button class="btn-pro btn-success" id="btnLock" disabled style="flex:1;">
-                    <span class="btn-content"><span class="btn-text">🔒 Lock PDF</span><span class="btn-spinner"></span></span>
-                </button>
-                <button class="btn-pro btn-primary" id="btnUnlock" disabled style="flex:1;">
-                    <span class="btn-content"><span class="btn-text">🔓 Unlock PDF</span><span class="btn-spinner"></span></span>
-                </button>
-            </div>
-            <div class="password-input-group" id="passwordGroup" style="display:none;">
+            <div class="password-input-group" id="passwordGroup">
                 <input type="password" class="password-input" id="passwordInput" placeholder="Enter password...">
+            </div>
+            <div style="display:flex;gap:8px;">
+                <button class="btn-pro btn-success" id="btnLock" style="flex:1;">
+                    <span class="btn-content"><span class="btn-text">Lock PDF</span><span class="btn-spinner"></span></span>
+                </button>
+                <button class="btn-pro btn-primary" id="btnUnlock" style="flex:1;">
+                    <span class="btn-content"><span class="btn-text">Unlock PDF</span><span class="btn-spinner"></span></span>
+                </button>
             </div>
         </div>
 
-        <!-- Progress -->
         <div class="progress-pro" id="progressPro">
             <div class="progress-header"><span>Processing...</span><span id="progressProVal">0%</span></div>
             <div class="progress-track"><div class="progress-fill" id="progressProFill"></div></div>
         </div>
 
-        <!-- Result -->
         <div class="result-pro" id="resultPro">
-            <div class="check-icon">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-            </div>
+            <div class="check-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>
             <div class="result-title">Processing Complete</div>
             <div class="result-filename" id="resultProName"></div>
-            <a class="btn-pro btn-gold" id="downloadProBtn" href="#" download style="display:inline-flex;width:auto;padding:10px 24px;">
-                <span class="btn-content"><span class="btn-text">Download File</span></span>
-            </a>
+            <a class="btn-pro btn-gold" id="downloadProBtn" href="#" download style="display:inline-flex;width:auto;padding:10px 24px;">Download File</a>
         </div>
     </main>
 
@@ -478,13 +309,11 @@
         tg.ready(); tg.expand();
         const haptic = tg.HapticFeedback;
         const user = tg.initDataUnsafe?.user;
-
         if (user) {
             document.getElementById('proAvatar').textContent = (user.first_name || '?')[0].toUpperCase();
             document.getElementById('proName').textContent = user.first_name || 'User';
         }
 
-        // DOM
         const panels = { reverse: document.getElementById('panelReverse'), batch: document.getElementById('panelBatch'), password: document.getElementById('panelPassword') };
         const progressPro = document.getElementById('progressPro');
         const progressProFill = document.getElementById('progressProFill');
@@ -493,11 +322,9 @@
         const resultProName = document.getElementById('resultProName');
         const downloadProBtn = document.getElementById('downloadProBtn');
         const toastPro = document.getElementById('toastPro');
-
         let currentMode = 'reverse';
         let batchFiles = [];
 
-        // Feature Cards
         document.querySelectorAll('.pro-feature-card').forEach(card => {
             card.addEventListener('click', () => {
                 if (haptic) haptic.impactOccurred('light');
@@ -509,33 +336,22 @@
             });
         });
 
-        // Toast
-        function showToast(msg, type) {
-            toastPro.textContent = msg; toastPro.className = 'toast-pro ' + type + ' show';
-            clearTimeout(toastPro._t); toastPro._t = setTimeout(() => toastPro.classList.remove('show'), 3000);
-        }
-
-        // Progress
+        function showToast(msg, type) { toastPro.textContent = msg; toastPro.className = 'toast-pro ' + type + ' show'; clearTimeout(toastPro._t); toastPro._t = setTimeout(() => toastPro.classList.remove('show'), 3000); }
         function showProgress() { progressPro.classList.add('visible'); progressProFill.style.width = '0%'; progressProVal.textContent = '0%'; }
         function hideProgress() { progressPro.classList.remove('visible'); }
         function updateProgress(p) { progressProFill.style.width = p + '%'; progressProVal.textContent = Math.round(p) + '%'; }
+        function showResult(name, url) { resultProName.textContent = name; resultPro.classList.add('visible'); downloadProBtn.href = url; downloadProBtn.download = name; }
 
-        // Result
-        function showResult(name, url) {
-            resultProName.textContent = name; resultPro.classList.add('visible');
-            downloadProBtn.href = url; downloadProBtn.download = name;
-        }
-
-        // ============ REVERSE: Word → PDF ============
+        // REVERSE
         let reverseFile = null;
         document.getElementById('uploadReverse').addEventListener('click', () => document.getElementById('fileReverse').click());
         document.getElementById('fileReverse').addEventListener('change', e => {
             if (e.target.files[0]) { reverseFile = e.target.files[0]; showFileInfo('fileReverseInfo', 'fileReverseName', 'fileReverseSize', reverseFile); document.getElementById('btnReverse').disabled = false; }
         });
-        document.getElementById('fileReverseRemove').addEventListener('click', () => { reverseFile = null; document.getElementById('fileReverseInfo').style.display = 'none'; document.getElementById('btnReverse').disabled = true; });
+        document.getElementById('fileReverseRemove').addEventListener('click', () => { reverseFile = null; document.getElementById('fileReverseInfo').style.display = 'none'; document.getElementById('btnReverse').disabled = true; document.getElementById('fileReverse').value = ''; });
         document.getElementById('btnReverse').addEventListener('click', () => convertFile(reverseFile, 'reverse'));
 
-        // ============ BATCH ============
+        // BATCH
         document.getElementById('uploadBatch').addEventListener('click', () => document.getElementById('fileBatch').click());
         document.getElementById('fileBatch').addEventListener('change', e => {
             const files = Array.from(e.target.files).slice(0, 10);
@@ -545,24 +361,19 @@
         });
         function renderBatchList() {
             const list = document.getElementById('batchList');
-            list.innerHTML = batchFiles.map((f, i) => `
-                <div class="batch-item">
-                    <span class="batch-item-name">${f.name}</span>
-                    <span class="batch-item-size">${(f.size/1024/1024).toFixed(2)} MB</span>
-                    <button class="batch-item-remove" onclick="removeBatchFile(${i})">✕</button>
-                </div>`).join('');
+            list.innerHTML = batchFiles.map((f, i) => `<div class="batch-item"><span class="batch-item-name">${f.name}</span><span class="batch-item-size">${(f.size/1024/1024).toFixed(2)} MB</span><button class="batch-item-remove" onclick="removeBatchFile(${i})">✕</button></div>`).join('');
             list.classList.toggle('visible', batchFiles.length > 0);
         }
-        function removeBatchFile(i) { batchFiles.splice(i, 1); renderBatchList(); document.getElementById('btnBatch').disabled = batchFiles.length === 0; }
+        function removeBatchFile(i) { batchFiles.splice(i, 1); renderBatchList(); document.getElementById('btnBatch').disabled = batchFiles.length === 0; if (batchFiles.length === 0) document.getElementById('fileBatch').value = ''; }
         document.getElementById('btnBatch').addEventListener('click', () => convertBatch());
 
-        // ============ PASSWORD ============
+        // PASSWORD
         let passwordFile = null;
         document.getElementById('uploadPassword').addEventListener('click', () => document.getElementById('filePassword').click());
         document.getElementById('filePassword').addEventListener('change', e => {
-            if (e.target.files[0]) { passwordFile = e.target.files[0]; showFileInfo('filePasswordInfo', 'filePasswordName', 'filePasswordSize', passwordFile); document.getElementById('btnLock').disabled = false; document.getElementById('btnUnlock').disabled = false; document.getElementById('passwordGroup').style.display = 'flex'; }
+            if (e.target.files[0]) { passwordFile = e.target.files[0]; showFileInfo('filePasswordInfo', 'filePasswordName', 'filePasswordSize', passwordFile); }
         });
-        document.getElementById('filePasswordRemove').addEventListener('click', () => { passwordFile = null; document.getElementById('filePasswordInfo').style.display = 'none'; document.getElementById('btnLock').disabled = true; document.getElementById('btnUnlock').disabled = true; document.getElementById('passwordGroup').style.display = 'none'; });
+        document.getElementById('filePasswordRemove').addEventListener('click', () => { passwordFile = null; document.getElementById('filePasswordInfo').style.display = 'none'; document.getElementById('filePassword').value = ''; });
         document.getElementById('btnLock').addEventListener('click', () => processPassword('lock'));
         document.getElementById('btnUnlock').addEventListener('click', () => processPassword('unlock'));
 
@@ -572,51 +383,37 @@
             document.getElementById(sizeId).textContent = (file.size/1024/1024).toFixed(2) + ' MB';
         }
 
-        // ============ API CALLS ============
         async function convertFile(file, type) {
             if (!file) return;
             if (haptic) haptic.impactOccurred('heavy');
-            showProgress();
-            resultPro.classList.remove('visible');
+            showProgress(); resultPro.classList.remove('visible');
             const fd = new FormData(); fd.append('file', file); fd.append('type', type);
-            let p = 0;
-            const iv = setInterval(() => { p += Math.random()*10+3; if (p>88) p=88; updateProgress(p); }, 300);
+            let p = 0; const iv = setInterval(() => { p += Math.random()*10+3; if (p>88) p=88; updateProgress(p); }, 300);
             try {
                 const r = await fetch('/api/pro/convert', { method:'POST', body:fd });
                 clearInterval(iv);
-                if (!r.ok) throw new Error('Failed');
+                if (!r.ok) { const e = await r.json().catch(()=>({error:'Failed'})); throw new Error(e.error); }
                 updateProgress(100);
-                const blob = await r.blob();
-                const url = URL.createObjectURL(blob);
+                const blob = await r.blob(); const url = URL.createObjectURL(blob);
                 const name = file.name.replace(/\.[^.]+$/, '') + '.pdf';
                 setTimeout(() => { hideProgress(); showResult(name, url); showToast('Conversion complete', 'success'); if (haptic) haptic.notificationOccurred('success'); }, 400);
-            } catch(e) {
-                clearInterval(iv); hideProgress();
-                showToast('Error: ' + e.message, 'error');
-            }
+            } catch(e) { clearInterval(iv); hideProgress(); showToast('Error: ' + e.message, 'error'); }
         }
 
         async function convertBatch() {
             if (batchFiles.length === 0) return;
             if (haptic) haptic.impactOccurred('heavy');
-            showProgress();
-            resultPro.classList.remove('visible');
-            const fd = new FormData();
-            batchFiles.forEach(f => fd.append('files', f));
-            let p = 0;
-            const iv = setInterval(() => { p += Math.random()*5+1; if (p>90) p=90; updateProgress(p); }, 500);
+            showProgress(); resultPro.classList.remove('visible');
+            const fd = new FormData(); batchFiles.forEach(f => fd.append('files', f));
+            let p = 0; const iv = setInterval(() => { p += Math.random()*5+1; if (p>90) p=90; updateProgress(p); }, 500);
             try {
                 const r = await fetch('/api/pro/batch', { method:'POST', body:fd });
                 clearInterval(iv);
-                if (!r.ok) throw new Error('Failed');
+                if (!r.ok) { const e = await r.json().catch(()=>({error:'Failed'})); throw new Error(e.error); }
                 updateProgress(100);
-                const blob = await r.blob();
-                const url = URL.createObjectURL(blob);
+                const blob = await r.blob(); const url = URL.createObjectURL(blob);
                 setTimeout(() => { hideProgress(); showResult('converted_files.zip', url); showToast('Batch complete', 'success'); if (haptic) haptic.notificationOccurred('success'); }, 400);
-            } catch(e) {
-                clearInterval(iv); hideProgress();
-                showToast('Error: ' + e.message, 'error');
-            }
+            } catch(e) { clearInterval(iv); hideProgress(); showToast('Error: ' + e.message, 'error'); }
         }
 
         async function processPassword(action) {
@@ -624,24 +421,18 @@
             const password = document.getElementById('passwordInput').value;
             if (!password) { showToast('Enter password', 'error'); return; }
             if (haptic) haptic.impactOccurred('heavy');
-            showProgress();
-            resultPro.classList.remove('visible');
+            showProgress(); resultPro.classList.remove('visible');
             const fd = new FormData(); fd.append('file', passwordFile); fd.append('password', password); fd.append('action', action);
-            let p = 0;
-            const iv = setInterval(() => { p += Math.random()*15+5; if (p>85) p=85; updateProgress(p); }, 300);
+            let p = 0; const iv = setInterval(() => { p += Math.random()*15+5; if (p>85) p=85; updateProgress(p); }, 300);
             try {
                 const r = await fetch('/api/pro/password', { method:'POST', body:fd });
                 clearInterval(iv);
-                if (!r.ok) throw new Error('Failed');
+                if (!r.ok) { const e = await r.json().catch(()=>({error:'Failed'})); throw new Error(e.error); }
                 updateProgress(100);
-                const blob = await r.blob();
-                const url = URL.createObjectURL(blob);
+                const blob = await r.blob(); const url = URL.createObjectURL(blob);
                 const name = action === 'lock' ? 'locked_' + passwordFile.name : 'unlocked_' + passwordFile.name;
                 setTimeout(() => { hideProgress(); showResult(name, url); showToast('Done!', 'success'); if (haptic) haptic.notificationOccurred('success'); }, 400);
-            } catch(e) {
-                clearInterval(iv); hideProgress();
-                showToast('Error: ' + e.message, 'error');
-            }
+            } catch(e) { clearInterval(iv); hideProgress(); showToast('Error: ' + e.message, 'error'); }
         }
     </script>
 </body>
