@@ -7,7 +7,8 @@ import asyncio
 import sqlite3
 import threading
 import requests
-from datetime import datetime
+import zipfile
+from datetime import datetime, timedelta
 from io import BytesIO
 
 import fitz
@@ -16,6 +17,7 @@ from docx.shared import Pt, Cm, RGBColor, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from PIL import Image, ImageEnhance
 import pytesseract
+from PyPDF2 import PdfReader, PdfWriter
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import Forbidden, BadRequest
 from telegram.ext import (
@@ -44,6 +46,7 @@ MAX_FILE_SIZE = 50 * 1024 * 1024
 OCR_LANGS = os.getenv("OCR_LANGS", "uzb+rus+eng")
 DB_PATH = os.getenv("DB_PATH", "bot_stats.db")
 PDF_TIMEOUT_SECONDS = int(os.getenv("PDF_TIMEOUT_SECONDS", "240"))
+PRO_FREE_UNTIL = datetime(2026, 7, 14)
 
 # =============== FLASK APP ===============
 flask_app = Flask(__name__, static_folder='webapp', static_url_path='')
@@ -53,22 +56,23 @@ CORS(flask_app)
 def serve_webapp():
     return send_from_directory('webapp', 'index.html')
 
+@flask_app.route('/pro')
+def serve_pro():
+    return send_from_directory('webapp', 'pro.html')
+
 @flask_app.route('/')
 def home():
     return send_from_directory('webapp', 'index.html')
 
 @flask_app.route('/api/convert', methods=['POST'])
 def api_convert():
-    """Web App orqali fayl konvertatsiya qilish"""
     try:
         file = request.files.get('file')
         if not file:
             return jsonify({'error': 'Fayl topilmadi'}), 400
-        
         content = file.read()
         ext = file.filename.split('.')[-1].lower()
         output_name = file.filename.rsplit('.', 1)[0] + '.docx'
-        
         if ext == 'pdf':
             output = pdf_to_word(content, file.filename)
         elif ext in ['xlsx', 'xls', 'csv']:
@@ -80,41 +84,122 @@ def api_convert():
         else:
             text = content.decode('utf-8', errors='ignore')
             output = text_to_word(text)
-        
-        return send_file(
-            output,
-            download_name=output_name,
-            as_attachment=True,
-            mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-        )
+        return send_file(output, download_name=output_name, as_attachment=True,
+                        mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
     except Exception as e:
         logger.error(f"API xatolik: {e}")
         return jsonify({'error': str(e)[:200]}), 500
 
 @flask_app.route('/api/send-to-bot', methods=['POST'])
 def send_to_bot():
-    """Web App natijasini Telegram bot orqali foydalanuvchiga yuborish"""
     try:
         file = request.files.get('file')
         user_id = request.form.get('user_id')
-        
         if not file or not user_id:
             return jsonify({'error': 'Fayl yoki user_id topilmadi'}), 400
-        
         url = f"https://api.telegram.org/bot{TOKEN}/sendDocument"
         files = {'document': (file.filename, file.read(), file.content_type or 'application/octet-stream')}
         data = {'chat_id': int(user_id), 'caption': '✅ Konvertatsiya natijangiz tayyor!'}
-        
         response = requests.post(url, data=data, files=files, timeout=30)
-        
         if response.status_code == 200:
             return jsonify({'success': True})
         else:
             logger.error(f"Botga yuborishda xatolik: {response.text}")
             return jsonify({'error': 'Botga yuborib bolmadi'}), 500
-            
     except Exception as e:
         logger.error(f"send-to-bot xatolik: {e}")
+        return jsonify({'error': str(e)[:200]}), 500
+
+# =============== PRO API ROUTES ===============
+@flask_app.route('/api/pro/convert', methods=['POST'])
+def api_pro_convert():
+    try:
+        file = request.files.get('file')
+        if not file:
+            return jsonify({'error': 'Fayl topilmadi'}), 400
+        content = file.read()
+        if not file.filename.endswith('.docx'):
+            return jsonify({'error': 'Faqat .docx fayllar qabul qilinadi'}), 400
+        doc = Document(BytesIO(content))
+        pdf_doc = fitz.open()
+        pdf_doc.new_page()
+        page = pdf_doc[0]
+        y = 72
+        for para in doc.paragraphs:
+            if para.text.strip():
+                page.insert_text(fitz.Point(72, y), para.text[:500], fontsize=11)
+                y += 14
+                if y > 700:
+                    pdf_doc.new_page()
+                    page = pdf_doc[-1]
+                    y = 72
+        pdf_output = BytesIO()
+        pdf_doc.save(pdf_output)
+        pdf_output.seek(0)
+        pdf_doc.close()
+        output_name = file.filename.rsplit('.', 1)[0] + '.pdf'
+        return send_file(pdf_output, download_name=output_name, as_attachment=True, mimetype='application/pdf')
+    except Exception as e:
+        logger.error(f"Pro convert xatolik: {e}")
+        return jsonify({'error': str(e)[:200]}), 500
+
+@flask_app.route('/api/pro/batch', methods=['POST'])
+def api_pro_batch():
+    try:
+        files = request.files.getlist('files')
+        if not files or len(files) > 10:
+            return jsonify({'error': '1 tadan 10 tagacha fayl yuklash kerak'}), 400
+        zip_buffer = BytesIO()
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for file in files:
+                content = file.read()
+                ext = file.filename.split('.')[-1].lower()
+                output_name = file.filename.rsplit('.', 1)[0] + '.docx'
+                if ext == 'pdf':
+                    output = pdf_to_word(content, file.filename)
+                elif ext in ['xlsx', 'xls', 'csv']:
+                    output = excel_to_word(content, ext, file.filename)
+                elif ext in ['html', 'htm']:
+                    output = html_to_word(content, file.filename)
+                elif ext == 'epub':
+                    output = epub_to_word(content, file.filename)
+                else:
+                    text = content.decode('utf-8', errors='ignore')
+                    output = text_to_word(text)
+                zf.writestr(output_name, output.getvalue())
+        zip_buffer.seek(0)
+        return send_file(zip_buffer, download_name='converted_files.zip', as_attachment=True, mimetype='application/zip')
+    except Exception as e:
+        logger.error(f"Batch xatolik: {e}")
+        return jsonify({'error': str(e)[:200]}), 500
+
+@flask_app.route('/api/pro/password', methods=['POST'])
+def api_pro_password():
+    try:
+        file = request.files.get('file')
+        password = request.form.get('password')
+        action = request.form.get('action')
+        if not file or not password:
+            return jsonify({'error': 'Fayl va parol kiritilishi shart'}), 400
+        content = file.read()
+        reader = PdfReader(BytesIO(content))
+        writer = PdfWriter()
+        if action == 'unlock' and reader.is_encrypted:
+            try:
+                reader.decrypt(password)
+            except:
+                return jsonify({'error': 'Noto\'g\'ri parol'}), 400
+        for page in reader.pages:
+            writer.add_page(page)
+        if action == 'lock':
+            writer.encrypt(password)
+        output = BytesIO()
+        writer.write(output)
+        output.seek(0)
+        prefix = 'locked_' if action == 'lock' else 'unlocked_'
+        return send_file(output, download_name=prefix + file.filename, as_attachment=True, mimetype='application/pdf')
+    except Exception as e:
+        logger.error(f"Password xatolik: {e}")
         return jsonify({'error': str(e)[:200]}), 500
 
 def run_flask():
@@ -127,20 +212,23 @@ def init_db():
     cur = conn.cursor()
     cur.execute("CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, username TEXT, first_seen TEXT)")
     cur.execute("CREATE TABLE IF NOT EXISTS conversions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, file_type TEXT, file_name TEXT, success INTEGER, created_at TEXT)")
+    cur.execute("CREATE TABLE IF NOT EXISTS pro_users (user_id INTEGER PRIMARY KEY, pro_until TEXT)")
     conn.commit()
     conn.close()
 
 def log_user(user_id: int, username: str):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    cur.execute("INSERT OR IGNORE INTO users (user_id, username, first_seen) VALUES (?, ?, ?)", (user_id, username, datetime.now().isoformat()))
+    cur.execute("INSERT OR IGNORE INTO users (user_id, username, first_seen) VALUES (?, ?, ?)",
+                (user_id, username, datetime.now().isoformat()))
     conn.commit()
     conn.close()
 
 def log_conversion(user_id: int, file_type: str, file_name: str, success: bool):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    cur.execute("INSERT INTO conversions (user_id, file_type, file_name, success, created_at) VALUES (?, ?, ?, ?, ?)", (user_id, file_type, file_name, int(success), datetime.now().isoformat()))
+    cur.execute("INSERT INTO conversions (user_id, file_type, file_name, success, created_at) VALUES (?, ?, ?, ?, ?)",
+                (user_id, file_type, file_name, int(success), datetime.now().isoformat()))
     conn.commit()
     conn.close()
 
@@ -157,6 +245,27 @@ def get_stats() -> dict:
     top_types = cur.fetchall()
     conn.close()
     return {"total_users": total_users, "total_conversions": total_conversions, "successful": successful, "top_types": top_types}
+
+def is_pro_user(user_id: int) -> bool:
+    if datetime.now() < PRO_FREE_UNTIL:
+        return True
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("SELECT pro_until FROM pro_users WHERE user_id = ?", (user_id,))
+    row = cur.fetchone()
+    conn.close()
+    if row:
+        pro_until = datetime.fromisoformat(row[0])
+        return pro_until > datetime.now()
+    return False
+
+def save_pro_status(user_id: int, pro_until: datetime):
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("INSERT OR REPLACE INTO pro_users (user_id, pro_until) VALUES (?, ?)",
+                (user_id, pro_until.isoformat()))
+    conn.commit()
+    conn.close()
 
 # =============== WORD HUJJAT ===============
 def create_doc(title: str, original_name: str = "") -> Document:
@@ -680,7 +789,6 @@ def make_progress_bar(current: int, total: int, width: int = 15) -> str:
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     log_user(user.id, user.username or user.first_name)
-    
     message = f"""
 ✨ <b>Assalomu alaykum, {user.first_name}!</b>
 
@@ -709,6 +817,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 📌 <b>24/7</b> ishlaydi
 📌 <b>Bepul</b> ✅
 
+💎 <b>/pro</b> — Pro funksiyalar
+
 👨‍💼 Admin: {ADMIN_USERNAME}
 
 Quyidagi menyudan foydalaning 👇
@@ -719,101 +829,46 @@ Quyidagi menyudan foydalaning 👇
 async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    
     if query.data == "help":
         await query.edit_message_text(HELP_TEXT, parse_mode='HTML', reply_markup=back_keyboard())
-    
     elif query.data == "formats":
         await query.edit_message_text(FORMATS_TEXT, parse_mode='HTML', reply_markup=back_keyboard())
-    
     elif query.data == "about":
         await query.edit_message_text(ABOUT_TEXT, parse_mode='HTML', reply_markup=back_keyboard())
-    
     elif query.data == "menu":
         user = query.from_user
-        message = f"""✨ <b>{user.first_name}</b>, asosiy menyu
-
-💼 <b>{BOT_NAME}</b>
-
-Fayl yoki matn yuboring — avtomatik Word'ga o'tkazaman.
-Yoki quyidagi tugmalardan foydalaning 👇"""
+        message = f"""✨ <b>{user.first_name}</b>, asosiy menyu\n\n💼 <b>{BOT_NAME}</b>\n\nFayl yoki matn yuboring — avtomatik Word'ga o'tkazaman.\nYoki quyidagi tugmalardan foydalaning 👇"""
         await query.edit_message_text(message, parse_mode='HTML', reply_markup=main_menu_keyboard())
-    
     elif query.data == "rasm_pdf_info":
-        message = """
-📸 <b>RASM → PDF</b>
-
-━━━━━━━━━━━━━━━━━━━━━
-
-Bir nechta rasmni bitta PDF qilish:
-
-1️⃣ /rasm_pdf buyrug'ini yuboring
-2️⃣ Rasmlarni birin-ketin jo'nating
-3️⃣ "✅ PDF QILISH" tugmasini bosing
-
-📌 Rasmlar A4 formatda, markazda joylashadi.
-"""
+        message = """📸 <b>RASM → PDF</b>\n\n━━━━━━━━━━━━━━━━━━━━━\n\nBir nechta rasmni bitta PDF qilish:\n\n1️⃣ /rasm_pdf buyrug'ini yuboring\n2️⃣ Rasmlarni birin-ketin jo'nating\n3️⃣ "✅ PDF QILISH" tugmasini bosing\n\n📌 Rasmlar A4 formatda, markazda joylashadi."""
         await query.edit_message_text(message, parse_mode='HTML', reply_markup=back_keyboard())
-    
     elif query.data == "public_stats":
         stats = get_stats()
-        message = f"""
-📊 <b>BOT STATISTIKASI</b>
-
-━━━━━━━━━━━━━━━━━━━━━
-
-👥 Foydalanuvchilar: <b>{stats['total_users']}</b>
-🔄 Konvertatsiyalar: <b>{stats['total_conversions']}</b>
-✅ Muvaffaqiyatli: <b>{stats['successful']}</b>
-
-━━━━━━━━━━━━━━━━━━━━━
-
-🌟 24/7 ishlaydi
-📌 Bepul xizmat
-⚡ Tez va sifatli
-"""
+        message = f"""📊 <b>BOT STATISTIKASI</b>\n\n━━━━━━━━━━━━━━━━━━━━━\n\n👥 Foydalanuvchilar: <b>{stats['total_users']}</b>\n🔄 Konvertatsiyalar: <b>{stats['total_conversions']}</b>\n✅ Muvaffaqiyatli: <b>{stats['successful']}</b>\n\n━━━━━━━━━━━━━━━━━━━━━\n\n🌟 24/7 ishlaydi\n📌 Bepul xizmat\n⚡ Tez va sifatli"""
         await query.edit_message_text(message, parse_mode='HTML', reply_markup=back_keyboard())
-    
     elif query.data == "contact_admin":
         context.user_data['awaiting_contact_message'] = True
-        await query.message.reply_text(
-            "📩 <b>Murojaat yuborish</b>\n\n"
-            "Xabaringizni yozing — to'g'ridan-to'g'ri adminga yuboriladi.\n"
-            "❌ Bekor qilish uchun /cancel",
-            parse_mode='HTML'
-        )
-    
+        await query.message.reply_text("📩 <b>Murojaat yuborish</b>\n\nXabaringizni yozing — to'g'ridan-to'g'ri adminga yuboriladi.\n❌ Bekor qilish uchun /cancel", parse_mode='HTML')
     elif query.data == "rename":
         if not context.user_data.get('last_output_bytes'):
             await query.message.reply_text("⚠️ O'zgartiriladigan fayl topilmadi.")
             return
         context.user_data['awaiting_rename'] = True
         await query.message.reply_text("✏️ <b>Yangi fayl nomini yozing</b> (kengaytmasiz):", parse_mode='HTML')
-    
     elif query.data == "make_pdf":
         images = context.user_data.get('pdf_images', [])
         if not images:
             await query.message.reply_text("⚠️ Hech qanday rasm topilmadi. Avval rasm yuboring.")
             return
-        
         await query.edit_message_reply_markup(reply_markup=None)
         progress = await query.message.reply_text(f"⚙️ <b>{len(images)}</b> ta rasmdan PDF yaratilmoqda...", parse_mode='HTML')
-        
         try:
             output = images_to_pdf(images)
             await progress.delete()
-            
             data = output.getvalue()
             context.user_data['last_output_bytes'] = data
             context.user_data['last_output_name'] = "rasmlar.pdf"
-            
-            await query.message.reply_document(
-                document=BytesIO(data),
-                filename="rasmlar.pdf",
-                caption=f"✅ <b>Tayyor!</b>\n🖼 <b>{len(images)}</b> ta rasmdan PDF yaratildi.",
-                parse_mode='HTML',
-                reply_markup=result_keyboard()
-            )
+            await query.message.reply_document(document=BytesIO(data), filename="rasmlar.pdf", caption=f"✅ <b>Tayyor!</b>\n🖼 <b>{len(images)}</b> ta rasmdan PDF yaratildi.", parse_mode='HTML', reply_markup=result_keyboard())
             log_conversion(query.from_user.id, "images_to_pdf", "rasmlar.pdf", success=True)
         except Exception as e:
             await progress.delete()
@@ -822,7 +877,6 @@ Bir nechta rasmni bitta PDF qilish:
         finally:
             context.user_data['collecting_pdf'] = False
             context.user_data['pdf_images'] = []
-    
     elif query.data == "cancel_pdf":
         context.user_data['collecting_pdf'] = False
         context.user_data['pdf_images'] = []
@@ -840,38 +894,13 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("⛔ <b>Ruxsat yo'q!</b>\nFaqat admin uchun.", parse_mode='HTML')
         return
-    
     stats = get_stats()
-    
-    message = f"""
-👑 <b>ADMIN PANEL</b>
-
-━━━━━━━━━━━━━━━━━━━━━
-
-🟢 <b>Holat:</b> Aktiv
-📌 <b>Versiya:</b> 3.0 Pro
-
-━━━━━━━━━━━━━━━━━━━━━
-
-📊 <b>STATISTIKA:</b>
-
-👥 Foydalanuvchilar: <b>{stats['total_users']}</b>
-🔄 Jami: <b>{stats['total_conversions']}</b>
-✅ Muvaffaqiyatli: <b>{stats['successful']}</b>
-❌ Xatolik: <b>{stats['total_conversions'] - stats['successful']}</b>
-
-━━━━━━━━━━━━━━━━━━━━━
-
-📈 <b>ENG KO'P:</b>
-"""
-    
+    message = f"""👑 <b>ADMIN PANEL</b>\n\n━━━━━━━━━━━━━━━━━━━━━\n\n🟢 <b>Holat:</b> Aktiv\n📌 <b>Versiya:</b> 3.0 Pro\n\n━━━━━━━━━━━━━━━━━━━━━\n\n📊 <b>STATISTIKA:</b>\n\n👥 Foydalanuvchilar: <b>{stats['total_users']}</b>\n🔄 Jami: <b>{stats['total_conversions']}</b>\n✅ Muvaffaqiyatli: <b>{stats['successful']}</b>\n❌ Xatolik: <b>{stats['total_conversions'] - stats['successful']}</b>\n\n━━━━━━━━━━━━━━━━━━━━━\n\n📈 <b>ENG KO'P:</b>\n"""
     emoji_map = {"pdf": "📄", "xlsx": "📊", "csv": "📊", "xls": "📊", "text": "📝", "photo_ocr": "🖼", "html": "🌐", "epub": "📚", "images_to_pdf": "📸"}
     for ftype, count in stats.get("top_types", [])[:5]:
         emoji = emoji_map.get(ftype, "📎")
         message += f"{emoji} {ftype}: <b>{count}</b>\n"
-    
     message += f"\n👨‍💼 Admin: {ADMIN_USERNAME}"
-    
     await update.message.reply_text(message, parse_mode='HTML')
 
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -889,34 +918,23 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     file_name = document.file_name
     user = update.effective_user
     log_user(user.id, user.username or user.first_name)
-    
     if document.file_size > MAX_FILE_SIZE:
         await update.message.reply_text("❌ Fayl hajmi 50 MB dan oshmasligi kerak.")
         return
-    
     file_ext = file_name.lower().split('.')[-1] if '.' in file_name else ''
     supported = ['pdf', 'xlsx', 'xls', 'csv', 'html', 'htm', 'epub', 'txt', 'md', 'json', 'xml']
-    
     if file_ext not in supported:
         await update.message.reply_text(f"❌ .{file_ext} qo'llab-quvvatlanmaydi.\n📋 /formats")
         return
-    
     file_emoji = {"pdf": "📄", "xlsx": "📊", "xls": "📊", "csv": "📊", "html": "🌐", "htm": "🌐", "epub": "📚"}.get(file_ext, "📎")
-    
-    msg = await update.message.reply_text(
-        f"{file_emoji} <b>{file_name}</b> yuklab olinmoqda...\n📦 {document.file_size // 1024} KB",
-        parse_mode='HTML'
-    )
-    
+    msg = await update.message.reply_text(f"{file_emoji} <b>{file_name}</b> yuklab olinmoqda...\n📦 {document.file_size // 1024} KB", parse_mode='HTML')
     try:
         file = await document.get_file()
         content = await file.download_as_bytearray()
         output_name = file_name.rsplit('.', 1)[0] + '.docx'
-        
         if file_ext == 'pdf':
             loop = asyncio.get_running_loop()
             last_edit = {"time": datetime.min, "text": ""}
-            
             async def update_progress_msg(text: str):
                 now = datetime.now()
                 if text == last_edit["text"] or (now - last_edit["time"]).total_seconds() < 2:
@@ -927,55 +945,33 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await msg.edit_text(text, parse_mode='HTML')
                 except:
                     pass
-            
             def sync_progress(current: int, total: int):
                 bar = make_progress_bar(current, total)
                 text = f"⚙️ <b>{file_name}</b> konvertatsiya qilinmoqda...\n{bar}"
                 asyncio.run_coroutine_threadsafe(update_progress_msg(text), loop)
-            
-            await msg.edit_text(
-                f"⚙️ <b>{file_name}</b> konvertatsiya qilinmoqda...\n{make_progress_bar(0, 1)}",
-                parse_mode='HTML'
-            )
-            
+            await msg.edit_text(f"⚙️ <b>{file_name}</b> konvertatsiya qilinmoqda...\n{make_progress_bar(0, 1)}", parse_mode='HTML')
             try:
-                output = await asyncio.wait_for(
-                    asyncio.to_thread(pdf_to_word, bytes(content), file_name, sync_progress),
-                    timeout=PDF_TIMEOUT_SECONDS
-                )
+                output = await asyncio.wait_for(asyncio.to_thread(pdf_to_word, bytes(content), file_name, sync_progress), timeout=PDF_TIMEOUT_SECONDS)
             except asyncio.TimeoutError:
                 await msg.delete()
-                await update.message.reply_text(
-                    f"⏱ <b>{file_name}</b> konvertatsiyasi {PDF_TIMEOUT_SECONDS} soniyadan ko'p vaqt oldi.\n"
-                    f"💡 Faylni kichikroq qismlarga bo'lib yuboring.",
-                    parse_mode='HTML'
-                )
+                await update.message.reply_text(f"⏱ <b>{file_name}</b> konvertatsiyasi {PDF_TIMEOUT_SECONDS} soniyadan ko'p vaqt oldi.\n💡 Faylni kichikroq qismlarga bo'lib yuboring.", parse_mode='HTML')
                 return
-        
         elif file_ext in ['xlsx', 'xls', 'csv']:
             await msg.edit_text(f"⚙️ <b>{file_name}</b> konvertatsiya qilinmoqda...", parse_mode='HTML')
             output = await asyncio.to_thread(excel_to_word, bytes(content), file_ext, file_name)
-        
         elif file_ext in ['html', 'htm']:
             await msg.edit_text(f"⚙️ <b>{file_name}</b> konvertatsiya qilinmoqda...", parse_mode='HTML')
             output = await asyncio.to_thread(html_to_word, bytes(content), file_name)
-        
         elif file_ext == 'epub':
             await msg.edit_text(f"⚙️ <b>{file_name}</b> konvertatsiya qilinmoqda...", parse_mode='HTML')
             output = await asyncio.to_thread(epub_to_word, bytes(content), file_name)
-        
         else:
             await msg.edit_text(f"⚙️ <b>{file_name}</b> konvertatsiya qilinmoqda...", parse_mode='HTML')
             text = content.decode('utf-8', errors='ignore')
             output = await asyncio.to_thread(text_to_word, text)
-        
         await msg.delete()
-        await send_result_document(
-            update, context, output, output_name,
-            f"✅ <b>Tayyor!</b>\n\n{file_emoji} <b>{file_name}</b>\n⬇️ <b>{output_name}</b>\n📅 {datetime.now().strftime('%d.%m.%Y %H:%M')}"
-        )
+        await send_result_document(update, context, output, output_name, f"✅ <b>Tayyor!</b>\n\n{file_emoji} <b>{file_name}</b>\n⬇️ <b>{output_name}</b>\n📅 {datetime.now().strftime('%d.%m.%Y %H:%M')}")
         log_conversion(user.id, file_ext, file_name, success=True)
-        
     except Exception as e:
         await msg.delete()
         logger.error(f"Xatolik ({file_name}): {e}")
@@ -989,42 +985,24 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     photo = update.message.photo[-1]
     file = await photo.get_file()
     content = await file.download_as_bytearray()
-    
     if context.user_data.get('collecting_pdf'):
         context.user_data.setdefault('pdf_images', []).append(bytes(content))
         count = len(context.user_data['pdf_images'])
-        
         message = f"📥 <b>{count}-rasm qabul qilindi!</b>\n\n📸 Jami: <b>{count}</b> ta rasm\nYana rasm yuboring yoki tugmani bosing 👇"
-        
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"✅ PDF QILISH ({count} ta)", callback_data="make_pdf")],
-            [InlineKeyboardButton("❌ Bekor qilish", callback_data="cancel_pdf")],
-        ])
-        
+        keyboard = InlineKeyboardMarkup([[InlineKeyboardButton(f"✅ PDF QILISH ({count} ta)", callback_data="make_pdf")], [InlineKeyboardButton("❌ Bekor qilish", callback_data="cancel_pdf")]])
         await update.message.reply_text(message, parse_mode='HTML', reply_markup=keyboard)
         return
-    
     msg = await update.message.reply_text("🖼 <b>Rasm qayta ishlanmoqda</b> (OCR)...", parse_mode='HTML')
-    
     try:
         text = await asyncio.to_thread(image_ocr, bytes(content))
-        
         if text and len(text.strip()) > 10:
             output = await asyncio.to_thread(text_to_word, text)
             await msg.delete()
-            await send_result_document(
-                update, context, output, "rasmdagi_matn.docx",
-                f"✅ <b>Tayyor!</b>\n📏 <b>{len(text)}</b> belgi"
-            )
+            await send_result_document(update, context, output, "rasmdagi_matn.docx", f"✅ <b>Tayyor!</b>\n📏 <b>{len(text)}</b> belgi")
             log_conversion(user.id, "photo_ocr", "photo.jpg", success=True)
         else:
             await msg.delete()
-            await update.message.reply_text(
-                "⚠️ <b>Rasmdan matn topilmadi.</b>\n\n"
-                "📌 Sabablar:\n• Rasmda matn yo'q\n• Rasm sifatsiz\n• Qo'l yozuvi\n\n"
-                "💡 Aniq, bosma matnli rasm yuboring.\n📄 Yoki /rasm_pdf orqali PDF qiling.",
-                parse_mode='HTML'
-            )
+            await update.message.reply_text("⚠️ <b>Rasmdan matn topilmadi.</b>\n\n📌 Sabablar:\n• Rasmda matn yo'q\n• Rasm sifatsiz\n• Qo'l yozuvi\n\n💡 Aniq, bosma matnli rasm yuboring.\n📄 Yoki /rasm_pdf orqali PDF qiling.", parse_mode='HTML')
             log_conversion(user.id, "photo_ocr", "photo.jpg", success=False)
     except Exception as e:
         await msg.delete()
@@ -1035,22 +1013,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def rasm_pdf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['collecting_pdf'] = True
     context.user_data['pdf_images'] = []
-    
-    message = """
-📸 <b>RASM → PDF REJIMI</b>
-
-━━━━━━━━━━━━━━━━━━━━━
-
-📤 Endi rasmlarni birin-ketin yuboring.
-Barcha rasmlar <b>bitta PDF</b> faylga birlashtiriladi.
-
-📌 <b>Eslatma:</b>
-• Rasmlar yuborgan tartibda joylashadi
-• Har bir rasm alohida sahifada
-• A4 formatda, markazda
-
-❌ Bekor qilish uchun /cancel
-"""
+    message = """📸 <b>RASM → PDF REJIMI</b>\n\n━━━━━━━━━━━━━━━━━━━━━\n\n📤 Endi rasmlarni birin-ketin yuboring.\nBarcha rasmlar <b>bitta PDF</b> faylga birlashtiriladi.\n\n📌 <b>Eslatma:</b>\n• Rasmlar yuborgan tartibda joylashadi\n• Har bir rasm alohida sahifada\n• A4 formatda, markazda\n\n❌ Bekor qilish uchun /cancel"""
     await update.message.reply_text(message, parse_mode='HTML')
 
 
@@ -1058,25 +1021,15 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     user = update.effective_user
     log_user(user.id, user.username or user.first_name)
-    
     if context.user_data.get('awaiting_contact_message'):
         context.user_data['awaiting_contact_message'] = False
         username_display = f"@{user.username}" if user.username else user.first_name
         try:
-            await context.bot.send_message(
-                ADMIN_ID,
-                f"📩 <b>YANGI MUROJAAT</b>\n\n"
-                f"👤 {username_display}\n"
-                f"🆔 ID: {user.id}\n\n"
-                f"💬 {text}\n\n"
-                f"↩️ Javob: /reply {user.id} <matn>",
-                parse_mode='HTML'
-            )
+            await context.bot.send_message(ADMIN_ID, f"📩 <b>YANGI MUROJAAT</b>\n\n👤 {username_display}\n🆔 ID: {user.id}\n\n💬 {text}\n\n↩️ Javob: /reply {user.id} <matn>", parse_mode='HTML')
             await update.message.reply_text("✅ <b>Murojaatingiz adminga yuborildi.</b>", parse_mode='HTML', reply_markup=back_keyboard())
         except:
             await update.message.reply_text(f"❌ Yuborib bo'lmadi.\n📞 Admin: {ADMIN_USERNAME}")
         return
-    
     if context.user_data.get('awaiting_rename'):
         context.user_data['awaiting_rename'] = False
         data = context.user_data.get('last_output_bytes')
@@ -1089,28 +1042,16 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not new_name.lower().endswith('.' + ext):
             new_name = f"{new_name}.{ext}"
         context.user_data['last_output_name'] = new_name
-        await update.message.reply_document(
-            document=BytesIO(data),
-            filename=new_name,
-            caption=f"✅ <b>Nomi o'zgartirildi:</b>\n📄 {new_name}",
-            parse_mode='HTML',
-            reply_markup=result_keyboard()
-        )
+        await update.message.reply_document(document=BytesIO(data), filename=new_name, caption=f"✅ <b>Nomi o'zgartirildi:</b>\n📄 {new_name}", parse_mode='HTML', reply_markup=result_keyboard())
         return
-    
     if len(text) < 10:
         await update.message.reply_text("⚠️ Kamida 10 ta belgi kerak.")
         return
-    
     msg = await update.message.reply_text("⏳ <b>Matn qayta ishlanmoqda...</b>", parse_mode='HTML')
-    
     try:
         output = await asyncio.to_thread(text_to_word, text)
         await msg.delete()
-        await send_result_document(
-            update, context, output, "matn.docx",
-            f"✅ <b>Tayyor!</b>\n📏 <b>{len(text)}</b> belgi"
-        )
+        await send_result_document(update, context, output, "matn.docx", f"✅ <b>Tayyor!</b>\n📏 <b>{len(text)}</b> belgi")
         log_conversion(user.id, "text", "matn.txt", success=True)
     except Exception as e:
         await msg.delete()
@@ -1129,24 +1070,62 @@ async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("⛔ Faqat admin uchun.")
         return
-    
     args = context.args
     if len(args) < 2:
         await update.message.reply_text("/reply <user_id> <matn>")
         return
-    
     try:
         target_id = int(args[0])
     except ValueError:
         await update.message.reply_text("⚠️ user_id raqam bo'lishi kerak.")
         return
-    
     reply_text = " ".join(args[1:])
     try:
         await context.bot.send_message(target_id, f"📩 <b>ADMIN JAVOBI:</b>\n\n{reply_text}", parse_mode='HTML')
         await update.message.reply_text("✅ Javob yuborildi.")
     except Exception as e:
         await update.message.reply_text(f"❌ Yuborib bo'lmadi: {str(e)[:150]}")
+
+
+async def pro_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    log_user(user.id, user.username or user.first_name)
+    if is_pro_user(user.id):
+        pro_url = os.getenv("WEBHOOK_URL", "https://worker-production-019c.up.railway.app") + "/pro"
+        if datetime.now() < PRO_FREE_UNTIL:
+            days = (PRO_FREE_UNTIL - datetime.now()).days
+            status = f"🆓 Bepul sinov: {days} kun qoldi"
+        else:
+            status = "💎 Pro faol"
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🚀 Pro Web App", web_app={"url": pro_url})],
+            [InlineKeyboardButton("🔙 Orqaga", callback_data="menu")],
+        ])
+        await update.message.reply_text(f"💎 <b>PRO VERSIYA</b>\n\n{status}\n\n🔥 Word→PDF | Batch+ZIP | Parol", parse_mode='HTML', reply_markup=keyboard)
+    else:
+        await update.message.reply_text(f"🔒 Pro yopiq.\n📞 {ADMIN_USERNAME}")
+
+
+async def givepro_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("⛔ Faqat admin uchun.")
+        return
+    args = context.args
+    if len(args) < 2:
+        await update.message.reply_text("/givepro <user_id> <kun>")
+        return
+    try:
+        user_id = int(args[0])
+        days = int(args[1])
+    except:
+        await update.message.reply_text("Raqam kiriting.")
+        return
+    save_pro_status(user_id, datetime.now() + timedelta(days=days))
+    await update.message.reply_text(f"✅ {user_id} ga {days} kunlik Pro berildi!")
+    try:
+        await context.bot.send_message(user_id, f"🎉 Sizga {days} kunlik PRO status berildi!\n/pro orqali kiring!")
+    except:
+        pass
 
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
@@ -1157,13 +1136,10 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
 def main():
     logger.info(f"🤖 {BOT_NAME} ishga tushmoqda...")
     init_db()
-    
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
     logger.info("🌐 Flask Web App server ishga tushdi")
-    
     app = Application.builder().token(TOKEN).build()
-    
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("formats", formats_command))
@@ -1173,18 +1149,15 @@ def main():
     app.add_handler(CommandHandler("rasm_pdf", rasm_pdf_command))
     app.add_handler(CommandHandler("cancel", cancel_command))
     app.add_handler(CommandHandler("reply", reply_command))
-    
+    app.add_handler(CommandHandler("pro", pro_command))
+    app.add_handler(CommandHandler("givepro", givepro_command))
     app.add_handler(CallbackQueryHandler(menu_callback))
-    
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-    
     app.add_error_handler(error_handler)
-    
     WEBHOOK_URL = os.getenv("WEBHOOK_URL", "")
     PORT = int(os.getenv("PORT", "8080"))
-    
     if WEBHOOK_URL:
         logger.info(f"🌐 Webhook: {WEBHOOK_URL}")
         app.run_webhook(listen="0.0.0.0", port=PORT, webhook_url=f"{WEBHOOK_URL}/webhook", drop_pending_updates=True)
